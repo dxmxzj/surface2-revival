@@ -3,3 +3,4 @@
 *.xz
 surface2-wifi.conf
 wpa_supplicant.conf
+__pycache__/
