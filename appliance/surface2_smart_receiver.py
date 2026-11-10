@@ -545,6 +545,7 @@ class SmartReceiverServer:
                 pass
 
             try:
+                touch_down_flag = False
                 with open(dev_path, "rb", buffering=0) as f:
                     while True:
                         buf = f.read(ev_size)
@@ -568,14 +569,19 @@ class SmartReceiverServer:
                                 cur_y = ev_val
                                 if cur_y > max_y:
                                     max_y = cur_y
-                        if ev_type == 1 and ev_code == 330 and ev_val == 1:
-                            if cur_x >= (max_x * 0.70) and cur_y <= (max_y * 0.18):
-                                with self.state_lock:
-                                    st = self.state
-                                if st == "STREAMING":
-                                    threading.Thread(target=self.stop_stream, daemon=True).start()
-                                else:
-                                    drop_to_terminal("Tapped [Terminal] button on Touchscreen")
+                        elif ev_type == 1 and ev_code == 330:
+                            if ev_val == 1:
+                                touch_down_flag = True
+                        elif ev_type == 0 and ev_code == 0:
+                            if touch_down_flag:
+                                touch_down_flag = False
+                                if cur_x >= (max_x * 0.70) and cur_y <= (max_y * 0.18):
+                                    with self.state_lock:
+                                        st = self.state
+                                    if st == "STREAMING":
+                                        threading.Thread(target=self.stop_stream, daemon=True).start()
+                                    else:
+                                        drop_to_terminal("Tapped [Terminal] button on Touchscreen")
             except Exception:
                 pass
 

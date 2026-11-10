@@ -289,7 +289,8 @@ class TouchKeyboard:
         bid = hit["id"]
         if bid == "ACT_DASHBOARD":
             set_tty1_rows(67)
-            subprocess.Popen(["/usr/local/bin/dashboard", "start"])
+            subprocess.run(["systemctl", "start", "surface-dashboard.service"], check=False)
+            time.sleep(0.3)
             os._exit(0)
         elif bid == "ACT_COLLAPSE":
             self.collapsed = True
@@ -358,6 +359,7 @@ def watch_touchscreen(kbd: TouchKeyboard):
     def listen_dev(dev_path):
         cur_x, cur_y = 0, 0
         max_x, max_y = 4095, 4095
+        touch_down_frame = False
         try:
             with open(dev_path, "rb", buffering=0) as f:
                 while kbd.running:
@@ -370,18 +372,23 @@ def watch_touchscreen(kbd: TouchKeyboard):
                             cur_x = ev_val
                         elif ev_code in (1, 54):
                             cur_y = ev_val
-                    elif ev_type == 1 and ev_code == 330:
-                        px = int(cur_x * FB_WIDTH / max_x)
-                        py = int(cur_y * FB_HEIGHT / max_y)
-                        t_now = time.strftime('%Y-%m-%d %H:%M:%S')
-                        log_line = f"{t_now} [TouchKbd] BTN_TOUCH={ev_val} raw=({cur_x}, {cur_y}) -> screen=({px}, {py})\n"
-                        print(log_line.strip(), flush=True)
-                        try:
-                            with open('/var/log/surface-touch.log', 'a') as lf:
-                                lf.write(log_line)
-                        except Exception:
-                            pass
+                    elif ev_type == 1 and ev_code == 330:  # BTN_TOUCH
                         if ev_val == 1:
+                            touch_down_frame = True
+                    elif ev_type == 0 and ev_code == 0:  # EV_SYN / SYN_REPORT
+                        if touch_down_frame:
+                            touch_down_frame = False
+                            # Coordinates cur_x, cur_y are now fully updated for this touch down!
+                            px = int(cur_x * FB_WIDTH / max_x)
+                            py = int(cur_y * FB_HEIGHT / max_y)
+                            t_now = time.strftime('%Y-%m-%d %H:%M:%S')
+                            log_line = f"{t_now} [TouchKbd] TAP: raw=({cur_x}, {cur_y}) -> screen=({px}, {py})\n"
+                            print(log_line.strip(), flush=True)
+                            try:
+                                with open('/var/log/surface-touch.log', 'a') as lf:
+                                    lf.write(log_line)
+                            except Exception:
+                                pass
                             threading.Thread(target=kbd.handle_tap, args=(px, py), daemon=True).start()
         except Exception:
             pass
