@@ -1,0 +1,13 @@
+[Unit]
+Description=Surface 2 Touchscreen Hardware Rail Initializer
+DefaultDependencies=no
+After=local-fs.target
+Before=surface-touch-kbd.service surface-dashboard.service graphical.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/surface-touch-init.py
+
+[Install]
+WantedBy=basic.target
