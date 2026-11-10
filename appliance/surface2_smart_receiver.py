@@ -389,18 +389,18 @@ class DualOverlayStreamPlayer:
             cmd = [
                 "ffmpeg",
                 "-hide_banner",
-                "-loglevel", "error",
-                "-fflags", "nobuffer+fastseek+flush_packets",
-                "-flags", "low_delay",
-                "-skip_loop_filter", "all",
+                "-loglevel", "warning",
                 "-threads", "4",
             ]
             if url.lower().startswith("rtsp://"):
-                cmd += ["-rtsp_transport", "tcp"]
+                cmd += [
+                    "-rtsp_transport", "tcp",
+                    "-buffer_size", "1024000",
+                    "-max_delay", "500000",
+                ]
             cmd += [
                 "-i", url,
                 "-an",
-                "-vf", f"scale={self.w}:{self.h}:flags=fast_bilinear",
                 "-pix_fmt", "yuv420p",
                 "-f", "rawvideo",
                 "pipe:1"
@@ -409,8 +409,7 @@ class DualOverlayStreamPlayer:
             self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=self.frame_sz * 2)
             stdout = self.proc.stdout
 
-            frame_buf = bytearray(self.frame_sz)
-            view = memoryview(frame_buf)
+            mm_view = memoryview(mm)
             plane_enabled = False
             frame_count = 0
             t0 = time.monotonic()
@@ -418,15 +417,12 @@ class DualOverlayStreamPlayer:
             while not self.stop_event.is_set():
                 pos = 0
                 while pos < self.frame_sz and not self.stop_event.is_set():
-                    n = stdout.readinto(view[pos:])
+                    n = stdout.readinto(mm_view[pos:self.frame_sz])
                     if not n:
                         break
                     pos += n
                 if pos < self.frame_sz:
                     break
-
-                # Single contiguous C memcpy into write-combined CMA scanout buffer
-                mm[:self.frame_sz] = frame_buf
 
                 if not plane_enabled:
                     for plane_id, crtc_id in DUAL_OVERLAY_TARGETS:
