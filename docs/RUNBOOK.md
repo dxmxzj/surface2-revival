@@ -107,19 +107,24 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
 4. On the blue UEFI prompt, press physical **Volume Down** to select **Disable Secure Boot**.
    Secure Boot is now permanently disabled!
 
-### Phase 2: Boot Unattended Installer (Zero Typing / No Keyboard Required)
-1. Insert the USB drive into the unlocked Surface 2 while powered off.
-2. Hold physical **Volume Down**, press and release **Power**, and keep holding **Volume Down** until the Surface logo appears with the loading dots.
-3. The tablet boots into the automated Linux installer in RAM (`initrd.gz`):
-   - **No keyboard is required.** The installer executes automatically via `/init`.
-   - Progress is printed directly to the tablet screen (`/dev/tty1`):
-     - `[1/5]` Automatically searches and mounts the USB drive / MicroSD card.
-     - `[2/5]` Partitions internal eMMC (`/dev/mmcblk0`) using `sfdisk` (128 MB EFI + 29 GB Linux ext4).
-     - `[3/5]` Formats filesystems (`vfat` and `ext4`).
-     - `[4/5]` Extracts the Ubuntu 22.04 LTS Smart Display rootfs and injects Wi-Fi / SSH keys.
-     - `[5/5]` Installs the UEFI boot chain and USB-host enabled Golden DTB.
+### Phase 2: Boot Unattended Installer (Zero Typing / Standalone All-In-One USB)
+> [!NOTE]
+> Because Tegra 4 Linux kernel transceivers suspend standard Type-A USB storage devices after handoff, the installer embeds the complete golden boot and rootfs payloads directly inside the ramdisk (`initrd.gz`). UEFI loads the entire 435 MB environment into physical RAM over USB in ~25 seconds, eliminating any runtime USB driver or MicroSD dependency!
+
+1. Copy the updated [`initrd.gz`](file:///mnt/d/surface2-usb-files/initrd.gz) and files from `D:\surface2-usb-files` to your FAT32 USB drive (`E:`).
+2. Insert the USB drive into the unlocked Surface 2 while powered off.
+3. Hold physical **Volume Down**, press and release **Power**, and keep holding **Volume Down** until the Surface logo appears with the loading dots.
+4. Release Volume Down.
+5. **Completely hands-off:**
+   - UEFI loads the kernel and all-in-one ramdisk into RAM (~25 seconds).
+   - The installer displays progress on the tablet screen (`/dev/tty1`):
+     - `[+] Embedded installer payload located in memory!`
+     - `[1/4] Partitioning internal 32 GB eMMC (/dev/mmcblk0)...`
+     - `[2/4] Formatting EFI and Root filesystems...`
+     - `[3/4] Extracting Ubuntu 22.04 LTS Smart Display Rootfs (takes ~90s)...`
+     - `[4/4] Installing UEFI Boot Chain & Golden DTB...`
    - Wi-Fi and Dropbear SSH are also brought up in the background automatically.
-4. When complete, the tablet displays a 15-second countdown on screen:
+6. When complete, the tablet displays a 15-second countdown on screen:
    - Unplug the USB drive during the countdown.
    - The tablet automatically reboots directly from internal eMMC into Ubuntu 22.04 LTS!
 5. **Authorize Tailscale on the New Tablet:**
