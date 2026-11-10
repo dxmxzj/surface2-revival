@@ -86,28 +86,42 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
    - After reboot, run `3_Run_Exploit_and_Disable_SecureBoot.cmd` (triggers `Yahallo.efi` on next reboot)
 3. On the blue UEFI Secure Boot prompt, select **Disable Secure Boot** (press **Volume Down** to confirm).
 
-### Phase 2: Boot the Automated USB-to-eMMC Ubuntu 22.04 Installer
-1. On your Linux workstation, create `/home/dxm/surface2-wifi.conf` (kept private, `chmod 600`, never committed to git):
+### Phase 2: Capture Golden Backup & Build the Automated USB-to-eMMC Installer
+1. **Capture the Sanitized Golden Backup from Surface 2 #1 (One-Time):**
+   ```bash
+   /home/dxm/surface2-revival/scripts/capture-golden-backup.sh root@192.168.86.76 root@glkvm-ai-pc.tail693f4.ts.net
+   ```
+   This saves `/home/dxm/surface2-backups/surface2-boot-golden.tar.gz` and `/home/dxm/surface2-backups/surface2-rootfs-golden.tar.gz` while automatically stripping `/etc/wpa_supplicant/wpa_supplicant.conf`, `/var/lib/tailscale/tailscaled.state`, and `/etc/ssh/ssh_host_*` so the second tablet gets a clean identity.
+2. **Prepare Your Local Wi-Fi Config (Private, Never Committed to Git):**
+   Create `/home/dxm/surface2-wifi.conf` (`chmod 600`):
    ```bash
    WIFI_SSID="Your_WiFi_SSID"
    WIFI_PASSWORD="Your_WiFi_Password"
    ```
-2. Run [`build-surface2-installer.sh`](file:///home/dxm/surface2-revival/scripts/build-surface2-installer.sh) to generate `surface2-ubuntu22-installer.img` (which embeds the Golden DTB `dtb-21906-final.dtb`, the clean Ubuntu 22.04 rootfs tarball, and your local `surface2-wifi.conf` + `~/.ssh/id_ed25519.pub`).
-3. Flash `surface2-ubuntu22-installer.img` to a USB drive (or mount via GLKVM virtual USB storage).
-4. With the Surface 2 powered off, hold **Volume Down**, press and release **Power**, and release **Volume Down** at the Surface logo.
-5. The USB installer automatically:
-   - Partitions `/dev/mmcblk0` (`128 MB` FAT32 `mmcblk0p1` + `29 GB` ext4 `mmcblk0p2`)
-   - Installs `boot.efi`, `efi/boot/bootarm.efi`, `efi/microsoft/boot/bootmgfw.efi` (`test.efi`), `efi/microsoft/boot/bcd`, `cmdline.txt`, and `dtb-21906-final.dtb` (`tegra114-microsoft-surface-2.dtb`) onto `/dev/mmcblk0p1`
-   - Extracts the Ubuntu 22.04 rootfs + Smart Display Appliance stack onto `/dev/mmcblk0p2`
-   - Injects your Wi-Fi credentials (`/etc/wpa_supplicant/wpa_supplicant.conf`) and SSH public key (`/root/.ssh/authorized_keys`)
-   - Reboots directly into the internal 32 GB eMMC (`Ubuntu 22.04 LTS`).
+3. **Build the Bootable USB-to-eMMC Installer Image:**
+   ```bash
+   /home/dxm/surface2-revival/scripts/build-usb-installer.sh /home/dxm/surface2-backups/surface2-ubuntu22-installer.img
+   ```
+4. **Boot the USB Installer on Surface 2 #2:**
+   - Flash `surface2-ubuntu22-installer.img` to a FAT32 USB drive (or bind to GLKVM virtual mass storage).
+   - With the unlocked Surface 2 powered off, hold **Volume Down**, press and release **Power**, and release **Volume Down** at the Surface logo.
+   - The USB installer displays live progress on `tty1`, partitions `/dev/mmcblk0` (`128 MB` FAT32 `/dev/mmcblk0p1` + `29 GB` ext4 `/dev/mmcblk0p2`), installs the UEFI boot chain + Golden DTB (`tegra114-microsoft-surface-2.dtb`), extracts the Ubuntu 22.04 Smart Display rootfs, injects your Wi-Fi config and SSH public key, generates fresh SSH host keys, and triggers a 5-second hardware watchdog reboot directly into internal eMMC.
+5. **Authorize Tailscale on the New Tablet:**
+   - Once booted into Ubuntu 22.04 over Wi-Fi, SSH in and run:
+     ```bash
+     tailscale up --hostname=surface2-2 --accept-routes
+     ```
+   - Note: Because the `5.17.0-rc3-next-20220207` kernel does not include `CONFIG_TUN`, `/etc/default/tailscaled` is pre-configured with `FLAGS="--tun=userspace-networking --socks5-server=localhost:1055 --outbound-http-proxy-listen=localhost:1055"`. Incoming connections to SSH (`22`), Web Controller (`8080`), and AirPlay (`7000`) work seamlessly over the Tailscale IP.
 
 ---
 
-## 4. Smart Display Appliance & Terminal/Dashboard Switching
+## 4. Smart Display Appliance, Dual-Head `YU12` Video Engine & Touch Keyboard
 
-Once booted into Ubuntu 22.04 from internal eMMC, the Surface 2 runs the Smart Display Appliance stack (matching the Intel Compute Stick architecture):
-- **1080p Smart Display Dashboard (`surface-dashboard.service`):** Renders live clock, system metrics, battery status, Wi-Fi/Tailscale IP, and streaming instructions via `cage` + `mpv` (with Tegra VDE `/dev/video0` hardware H.264 acceleration).
+Once booted into Ubuntu 22.04 from internal eMMC, the Surface 2 runs the Smart Display Appliance stack:
+- **Dual-Display 1080p Smart Display Dashboard (`surface-dashboard.service`):** Renders live clock, system metrics, battery status, Wi-Fi/Tailscale IP, and streaming instructions directly to `/dev/fb0` (`1920x1080` 32bpp `BGRA`), mirroring simultaneously on both the internal 1080p LCD (`DSI-1`) and 1080p60 Micro-HDMI (`HDMI-A-1`).
+- **Dual-Head Hardware `YU12` (`YUV420P`) Overlay Video Engine (`DualOverlayStreamPlayer`):**
+  - Uses Tegra 4's dedicated hardware planar `YU12` (`YUV420P`) overlay planes — **`Plane 42` on `CRTC 64` (Micro-HDMI)** and **`Plane 76` on `CRTC 98` (Internal 1080p LCD)** — which perform `YUV -> RGB` color space conversion and scaling in dedicated display silicon at **0% CPU**.
+  - Binds both hardware overlay planes once at stream start to a shared CMA scanout buffer (`1920x1080` `YU12`) so both Display Controllers (`DC0` and `DC1`) scan out the video continuously at 60 Hz with **zero per-frame VBLANK blocking**, achieving full 30 fps 1080p RTSP streaming with ~59% idle CPU.
 - **Apple AirPlay Receiver (`uxplay.service`):** Advertises `Surface2` on the LAN for Mac/iPhone/iPad screen mirroring; automatically yields the display when an AirPlay client connects and restores the dashboard on disconnect.
 - **Web Controller & RTSP Cast API (`http://<surface2-ip>:8080`):** Cast any RTSP/HTTP video stream via browser or `curl "http://<ip>:8080/play?url=rtsp://..."`.
 
