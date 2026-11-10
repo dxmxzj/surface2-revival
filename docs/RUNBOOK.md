@@ -51,7 +51,22 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
   - `/regulator-usb3` (`usb2_vbus`)
   - `/what_ever` (`GPIO 0x3a` Wi-Fi rail)
 
-### Fix 4: `systemd` Default `wpa_supplicant.service` Conflict & `Type=forking` 90s Timeout
+### Fix 4: Powering the Atmel maXTouch Touchscreen (`03EB:843C`) and Restoring Touch Input
+- **Symptom:** The Atmel capacitive touchscreen controller (`03EB:843C` on I2C bus 1 at address `0x4b`) was completely inactive, did not appear on I2C or input events, and IRQ 102 never fired.
+- **Root Cause & ACPI Extraction:**
+  - Dumped Microsoft Surface 2 official ACPI tables (`DSDT` and `SSDT` from physical memory `0xfdf1c000`).
+  - Table `AP20EDK2` describes device `\_SB.TOUC` (`_HID = "MSHW0100"`, `_CID = "PNP0C50"`):
+    1. **Power Resource (`PRTU`):** Controls `ESD1` on `TEGRA_GPIO(K, 6)` = **GPIO 86** (`0x56`). `PRTU._ON` drives GPIO 86 HIGH (`1`).
+    2. **Reset Resource (`PRGR`):** Controls `GSRT` on `TEGRA_GPIO(H, 2)` = **GPIO 58** (`0x3a`). `PRGR._ON` pulses GPIO 58 LOW for 100ms, then drives it HIGH (`1`).
+    3. **Interrupt Line:** `TEGRA_GPIO(O, 6)` = **GPIO 118** (GIC IRQ 102), Active Low Level.
+  - In the original baseline DTB (`dtb-21906.dtb`), GPIO 86 was mistakenly assigned to `panel@0` as `reset-gpios = <0x05 0x56 0x00>`. As a result, the panel driver held GPIO 86 at 0V, cutting power to the touchscreen controller.
+- **Solution:**
+  1. Created [`surface-touch-init.service`](file:///home/dxm/surface2-revival/systemd/surface-touch-init.service) and [`surface-touch-init.py`](file:///home/dxm/surface2-revival/appliance/surface-touch-init.py), which runs at boot before graphical services to configure the Tegra GPIO controller (`0x6000d000`), drive GPIO 86 HIGH, and pulse GPIO 58 LOW $\rightarrow$ HIGH matching Microsoft's `PRGR` specification.
+  2. The controller immediately responds on I2C bus 1 at `0x4b`, registers as `/dev/input/event2` (4096 $\times$ 4096 `ABS_X`/`ABS_Y` and `BTN_TOUCH`), and services IRQ 102.
+  3. **Touch Coordinate Synchronization (`EV_SYN`):** The Linux input subsystem delivers `BTN_TOUCH=1` (press) *before* the new packet's `ABS_X` and `ABS_Y` coordinates. Both [`surface-touch-kbd.py`](file:///home/dxm/surface2-revival/appliance/surface-touch-kbd.py) and [`surface2_smart_receiver.py`](file:///home/dxm/surface2-revival/appliance/surface2_smart_receiver.py) wait for `EV_SYN / SYN_REPORT` before evaluating coordinates, completely eliminating "stale key buffering" (e.g. typing "da" producing "dd").
+  4. **Clean Handoff:** Transitions between Dashboard and Terminal use synchronous `systemctl` calls and zero the top 608px framebuffer buffer, preventing ghost dashboard artifacts from leaking into the console.
+
+### Fix 5: `systemd` Default `wpa_supplicant.service` Conflict & `Type=forking` 90s Timeout
 - **Symptoms:**
   1. On first eMMC `systemd` boot, `mwifiex_sdio` loaded (`mlan0`), but `wpa_supplicant` failed to associate to Wi-Fi.
   2. When `surface-wifi.service` was configured as `Type=forking`, `systemd` killed `wpa_supplicant` and `dhclient` exactly **90 seconds** after boot (`TimeoutStartSec=90s`) because the background keepalive subshell inherited open file descriptors from `surface-online.sh`.
@@ -64,7 +79,7 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
      ```
   2. Configure `/etc/systemd/system/surface-wifi.service` with `Type=simple`, `Restart=always`, and `KillMode=process`, and keep the `while true` watchdog loop in the foreground of `/usr/local/bin/surface-online.sh` (plus disable Marvell Wi-Fi power save via `iw dev mlan0 set power_save off`).
 
-### Fix 5: Fast Boot & Continuous Visible Boot Text (`cmdline.txt`)
+### Fix 6: Fast Boot & Continuous Visible Boot Text (`cmdline.txt`)
 - **Symptom:** Booting from USB showed `"using DTB from command line"` for ~45 seconds (while UEFI loaded the 43 MB `initrd.gz` over USB 2.0), followed by a quiet screen.
 - **Solution:**
   - Booting directly from `/dev/mmcblk0p1` into `/dev/mmcblk0p2` uses **no `initrd.gz`**, so `"using DTB from command line"` finishes in **< 1 second**.

@@ -30,10 +30,11 @@ ssh "${SSH_OPTS[@]}" "$TARGET" "tar --one-file-system -C / \
     --exclude='./tmp/*' \
     --exclude='./mnt/*' \
     --exclude='./var/cache/apt/archives/*.deb' \
+    --exclude='./var/log/journal/*' \
     --exclude='./etc/wpa_supplicant/wpa_supplicant.conf' \
     --exclude='./var/lib/tailscale/tailscaled.state' \
     --exclude='./etc/ssh/ssh_host_*' \
-    -czf - ." > "$BACKUP_DIR/surface2-rootfs-golden.tar.gz"
+    -czf - ." > "$BACKUP_DIR/surface2-rootfs-golden.tar.gz" || [ $? -eq 1 ]
 
 ls -lh "$BACKUP_DIR/surface2-rootfs-golden.tar.gz"
 echo "=== Golden Backup Complete in $BACKUP_DIR ==="
