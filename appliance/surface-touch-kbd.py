@@ -370,11 +370,16 @@ def watch_touchscreen(kbd: TouchKeyboard):
                             cur_x = ev_val
                         elif ev_code in (1, 54):
                             cur_y = ev_val
-                    elif ev_type == 1 and ev_code == 330 and ev_val == 1:  # BTN_TOUCH press
+                    elif ev_type == 1 and ev_code == 330:
                         px = int(cur_x * FB_WIDTH / max_x)
                         py = int(cur_y * FB_HEIGHT / max_y)
-                        print(f"[TouchKbd] Tap detected! raw=({cur_x}, {cur_y}) -> screen=({px}, {py})", flush=True)
-                        threading.Thread(target=kbd.handle_tap, args=(px, py), daemon=True).start()
+                        msg = f"[TouchKbd] BTN_TOUCH={ev_val} raw=({cur_x}, {cur_y}) -> screen=({px}, {py})
+"
+                        print(msg.strip(), flush=True)
+                        with open("/var/log/surface-touch.log", "a") as lf:
+                            lf.write(f"{time.strftime("%Y-%m-%d %H:%M:%S")} {msg}")
+                        if ev_val == 1:
+                            threading.Thread(target=kbd.handle_tap, args=(px, py), daemon=True).start()
         except Exception:
             pass
 
