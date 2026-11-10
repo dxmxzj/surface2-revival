@@ -1,0 +1,13 @@
+[Unit]
+Description=UxPlay AirPlay Mirroring Server (Surface2)
+After=network.target avahi-daemon.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/uxplay -n Surface2 -nh -vs waylandsink
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+#!/bin/bash
+# Easy CLI shortcut to cast RTSP/HTTP video streams to the Surface 2 Smart Display
+CMD="${1:-status}"
+URL="$2"
+
+case "$CMD" in
+    play)
+        if [ -z "$URL" ]; then
+            echo "Usage: cast play <rtsp-or-http-stream-url>"
+            exit 1
+        fi
+        systemctl is-active --quiet surface-dashboard.service || systemctl start surface-dashboard.service
+        curl -sG --data-urlencode "url=$URL" "http://127.0.0.1:8080/play"
+        echo ""
+        ;;
+    stop|dashboard)
+        curl -s "http://127.0.0.1:8080/stop"
+        echo ""
+        ;;
+    terminal|tty)
+        curl -s "http://127.0.0.1:8080/terminal"
+        echo ""
+        ;;
+    status)
+        curl -s "http://127.0.0.1:8080/status"
+        echo ""
+        ;;
+    *)
+        echo "Usage: cast {play <url>|stop|terminal|status}"
+        ;;
+esac

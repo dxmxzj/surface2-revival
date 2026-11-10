@@ -1,0 +1,14 @@
+#!/bin/bash
+echo 'Syncing filesystems and triggering 3-second Tegra hardware watchdog reset...'
+sync
+python3 -c '
+import fcntl, os, struct, time
+fd = os.open("/dev/watchdog0", os.O_RDWR)
+# WDIOC_SETTIMEOUT = 0xc0045706
+buf = struct.pack("I", 3)
+try:
+    fcntl.ioctl(fd, 0xc0045706, buf)
+except Exception:
+    pass
+time.sleep(10)
+' &

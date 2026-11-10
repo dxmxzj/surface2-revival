@@ -1,0 +1,5 @@
+*.img
+*.tar.gz
+*.xz
+surface2-wifi.conf
+wpa_supplicant.conf

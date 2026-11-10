@@ -1,0 +1,13 @@
+[Unit]
+Description=Surface 2 Smart Display Dashboard & Stream Receiver
+After=network.target surface-wifi.service getty@tty1.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/surface2_smart_receiver.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

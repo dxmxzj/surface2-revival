@@ -1,0 +1,42 @@
+#!/bin/bash
+# Easy CLI shortcut to start, stop, or check the Surface 2 Smart Display Dashboard
+ACTION="${1:-start}"
+
+case "$ACTION" in
+    start|on|up)
+        echo "Starting Surface 2 Smart Display Dashboard..."
+        systemctl stop surface-touch-kbd.service 2>/dev/null || true
+        systemctl start surface-dashboard.service
+        ;;
+    stop|off|down|terminal|tty)
+        echo "Stopping Surface 2 Smart Display Dashboard and returning to tty1 (with On-Screen Touch Keyboard)..."
+        systemctl stop surface-dashboard.service
+        killall cage mpv 2>/dev/null || true
+        chvt 1 2>/dev/null || true
+        systemctl start surface-touch-kbd.service 2>/dev/null || true
+        ;;
+    restart|reload)
+        echo "Restarting Surface 2 Smart Display Dashboard..."
+        systemctl stop surface-touch-kbd.service 2>/dev/null || true
+        systemctl restart surface-dashboard.service
+        ;;
+    kbd-on|keyboard)
+        systemctl start surface-touch-kbd.service
+        ;;
+    kbd-off|nokbd)
+        systemctl stop surface-touch-kbd.service
+        ;;
+    status)
+        systemctl status surface-dashboard.service --no-pager
+        echo ""
+        curl -s http://127.0.0.1:8080/status 2>/dev/null && echo ""
+        ;;
+    *)
+        echo "Usage: dashboard [start|stop|restart|kbd-on|kbd-off|status]"
+        echo "  dashboard         -> Start the 1080p Smart Display Dashboard"
+        echo "  dashboard stop    -> Drop out of Dashboard to tty1 + On-Screen Touch Keyboard"
+        echo "  dashboard kbd-off -> Hide the tty1 On-Screen Touch Keyboard"
+        echo "  dashboard kbd-on  -> Show the tty1 On-Screen Touch Keyboard"
+        echo "  dashboard status  -> Show current service and stream status"
+        ;;
+esac

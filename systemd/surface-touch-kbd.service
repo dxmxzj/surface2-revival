@@ -1,0 +1,11 @@
+[Unit]
+Description=Surface 2 Framebuffer On-Screen Touch Keyboard (tty1)
+After=getty@tty1.service
+Conflicts=surface-dashboard.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/surface-touch-kbd.py
+Restart=on-failure
+RestartSec=2

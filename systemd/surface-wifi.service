@@ -1,0 +1,13 @@
+[Unit]
+Description=Surface 2 Auto Wi-Fi and SSH
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/surface-online.sh
+Restart=always
+RestartSec=5
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

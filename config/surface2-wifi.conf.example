@@ -1,0 +1,4 @@
+# Copy this file to /home/dxm/surface2-wifi.conf (chmod 600) before building the USB installer.
+# NEVER commit your real surface2-wifi.conf to git.
+WIFI_SSID="YOUR_WIFI_SSID"
+WIFI_PASSWORD="YOUR_WIFI_PASSWORD"
