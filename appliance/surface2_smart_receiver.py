@@ -197,18 +197,20 @@ def restore_tty1_terminal(reason="User requested terminal", start_kbd=True):
     except Exception:
         pass
     if start_kbd:
-        subprocess.Popen("systemctl start surface-touch-kbd.service 2>/dev/null", shell=True)
+        subprocess.run(["systemctl", "start", "surface-touch-kbd.service"], check=False)
 
 
 def drop_to_terminal(reason="User requested terminal"):
     """Stop the dashboard kiosk and return cleanly to tty1 with On-Screen Touch Keyboard."""
     print(f"[SmartReceiver] Dropping to terminal (tty1): {reason}", flush=True)
+    try:
+        with open("/dev/fb0", "r+b") as fb:
+            fb.seek(0)
+            fb.write(b"\x00" * (1920 * 608 * 4))
+    except Exception:
+        pass
     receiver.stop_stream_Pipeline()
     restore_tty1_terminal(reason, start_kbd=True)
-    subprocess.Popen(
-        "systemctl stop surface-dashboard.service 2>/dev/null; pkill -9 ffmpeg mpv 2>/dev/null",
-        shell=True
-    )
     os._exit(0)
 
 
@@ -552,8 +554,11 @@ class SmartReceiverServer:
                         if not buf or len(buf) < ev_size:
                             break
                         _, _, ev_type, ev_code, ev_val = struct.unpack(fmt, buf)
-                        if ev_type == 1 and ev_val == 1:
-                            if ev_code in (1, 16):  # KEY_ESC=1, KEY_Q=16
+                        if ev_type == 1:
+                            if ev_code == 330:  # BTN_TOUCH
+                                if ev_val == 1:
+                                    touch_down_flag = True
+                            elif ev_val == 1 and ev_code in (1, 16):  # KEY_ESC=1, KEY_Q=16
                                 with self.state_lock:
                                     st = self.state
                                 if st == "STREAMING":
@@ -569,9 +574,6 @@ class SmartReceiverServer:
                                 cur_y = ev_val
                                 if cur_y > max_y:
                                     max_y = cur_y
-                        elif ev_type == 1 and ev_code == 330:
-                            if ev_val == 1:
-                                touch_down_flag = True
                         elif ev_type == 0 and ev_code == 0:
                             if touch_down_flag:
                                 touch_down_flag = False
