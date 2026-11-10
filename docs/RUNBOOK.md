@@ -94,33 +94,34 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
 ## 3. Step-by-Step Procedure for a New Surface 2
 
 ### Phase 1: Unlock Secure Boot in Windows RT 8.1 (One-Time per Device)
-1. Format a USB drive as **FAT32** and copy the `unlock-usb/` toolkit onto it.
-2. Boot the Surface 2 into Windows RT 8.1, plug in the USB drive, and run as Administrator:
-   - `1_Install_Golden_Keys.cmd` (installs the Golden Keys into the registry)
-   - `2_Enable_TestSigning.cmd` (enables `testsigning` in BCD and reboots)
-   - After reboot, run `3_Run_Exploit_and_Disable_SecureBoot.cmd` (triggers `Yahallo.efi` on next reboot)
-3. On the blue UEFI Secure Boot prompt, select **Disable Secure Boot** (press **Volume Down** to confirm).
+> [!IMPORTANT]
+> To prevent Windows Boot Manager from attempting to load unsigned Linux boot files (`\test.efi`) from the USB drive before Secure Boot is disabled, always run the unlock scripts from the local Windows RT disk:
 
-### Phase 2: Capture Golden Backup & Build the Automated USB-to-eMMC Installer
-1. **Capture the Sanitized Golden Backup from Surface 2 #1 (One-Time):**
-   ```bash
-   /home/dxm/surface2-revival/scripts/capture-golden-backup.sh root@192.168.86.76 root@glkvm-ai-pc.tail693f4.ts.net
-   ```
-   This saves `/home/dxm/surface2-backups/surface2-boot-golden.tar.gz` and `/home/dxm/surface2-backups/surface2-rootfs-golden.tar.gz` while automatically stripping `/etc/wpa_supplicant/wpa_supplicant.conf`, `/var/lib/tailscale/tailscaled.state`, and `/etc/ssh/ssh_host_*` so the second tablet gets a clean identity.
-2. **Prepare Your Local Wi-Fi Config (Private, Never Committed to Git):**
-   Create `/home/dxm/surface2-wifi.conf` (`chmod 600`):
-   ```bash
-   WIFI_SSID="Your_WiFi_SSID"
-   WIFI_PASSWORD="Your_WiFi_Password"
-   ```
-3. **Build the Bootable USB-to-eMMC Installer Image:**
-   ```bash
-   /home/dxm/surface2-revival/scripts/build-usb-installer.sh /home/dxm/surface2-backups/surface2-ubuntu22-installer.img
-   ```
-4. **Boot the USB Installer on Surface 2 #2:**
-   - Flash `surface2-ubuntu22-installer.img` to a FAT32 USB drive (or bind to GLKVM virtual mass storage).
-   - With the unlocked Surface 2 powered off, hold **Volume Down**, press and release **Power**, and release **Volume Down** at the Surface logo.
-   - The USB installer displays live progress on `tty1`, partitions `/dev/mmcblk0` (`128 MB` FAT32 `/dev/mmcblk0p1` + `29 GB` ext4 `/dev/mmcblk0p2`), installs the UEFI boot chain + Golden DTB (`tegra114-microsoft-surface-2.dtb`), extracts the Ubuntu 22.04 Smart Display rootfs, injects your Wi-Fi config and SSH public key, generates fresh SSH host keys, and triggers a 5-second hardware watchdog reboot directly into internal eMMC.
+1. Boot Surface 2 into Windows RT 8.1 and insert the USB drive.
+2. Copy the `Unlock-SecureBoot` folder from the USB drive to the Windows RT Desktop (or `C:\Unlock-SecureBoot`), then **unplug the USB drive**.
+3. In the Desktop `Unlock-SecureBoot` folder, run each as Administrator:
+   - `1-Install_Golden_Keys.cmd` (installs Golden Keys debug policy and registers BCD entry; reboot when prompted).
+     - On reboot, the screen displays "Secure Boot Debug Policy Applicator". Press physical **Volume Down** to select *Accept and Install*, then press the capacitive **Windows logo** touch button to confirm. Tablet boots back to Windows RT.
+   - `2-Enable_Test_Signing.cmd` (enables test signing in BCD; note that this script exits back to command prompt and does not automatically reboot).
+   - `3-Disable_Secure_Boot_Yahallo.cmd` (triggers `Yahallo.efi` on next reboot; reboot when prompted).
+4. On the blue UEFI prompt, press physical **Volume Down** to select **Disable Secure Boot**.
+   Secure Boot is now permanently disabled!
+
+### Phase 2: Boot Unattended Installer (Zero Typing / No Keyboard Required)
+1. Insert the USB drive into the unlocked Surface 2 while powered off.
+2. Hold physical **Volume Down**, press and release **Power**, and keep holding **Volume Down** until the Surface logo appears with the loading dots.
+3. The tablet boots into the automated Linux installer in RAM (`initrd.gz`):
+   - **No keyboard is required.** The installer executes automatically via `/init`.
+   - Progress is printed directly to the tablet screen (`/dev/tty1`):
+     - `[1/5]` Automatically searches and mounts the USB drive / MicroSD card.
+     - `[2/5]` Partitions internal eMMC (`/dev/mmcblk0`) using `sfdisk` (128 MB EFI + 29 GB Linux ext4).
+     - `[3/5]` Formats filesystems (`vfat` and `ext4`).
+     - `[4/5]` Extracts the Ubuntu 22.04 LTS Smart Display rootfs and injects Wi-Fi / SSH keys.
+     - `[5/5]` Installs the UEFI boot chain and USB-host enabled Golden DTB.
+   - Wi-Fi and Dropbear SSH are also brought up in the background automatically.
+4. When complete, the tablet displays a 15-second countdown on screen:
+   - Unplug the USB drive during the countdown.
+   - The tablet automatically reboots directly from internal eMMC into Ubuntu 22.04 LTS!
 5. **Authorize Tailscale on the New Tablet:**
    - Once booted into Ubuntu 22.04 over Wi-Fi, SSH in and run:
      ```bash
