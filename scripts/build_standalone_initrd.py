@@ -5,6 +5,9 @@ Embeds the rootfs and bootloader golden backups directly in RAM so that:
 1. UEFI loads the full environment over USB.
 2. The installation is 100% independent of Tegra 4 USB PHY driver suspend bugs.
 3. Zero typing / hands-free unattended installation to internal 32GB eMMC.
+4. Robust Wi-Fi configuration generator (handles key-value and wpa_supplicant syntax).
+5. Disables rc.local to eliminate credential exposure on console.
+6. Continuous dynamic Wi-Fi interface detection and power-save management.
 """
 import os
 import sys
@@ -12,12 +15,13 @@ import gzip
 import io
 import time
 
-BASE_CPIO = '/tmp/surface2-linux/initrd_cpio.gz'
+SRC_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
 ROOTFS_TAR = '/mnt/d/surface2-usb-files/surface2-rootfs-golden.tar.gz'
 BOOT_TAR = '/mnt/d/surface2-usb-files/surface2-boot-golden.tar.gz'
 DTB_FILE = '/mnt/d/surface2-usb-files/tegra114-microsoft-surface-2.dtb'
 WIFI_CONF = '/mnt/d/surface2-usb-files/wpa_supplicant.conf'
 SSH_KEY = '/mnt/d/surface2-usb-files/authorized_keys'
+ONLINE_SH = '/home/dxm/surface2-revival/appliance/surface-online.sh'
 OUT_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
 
 INIT_SCRIPT = """#!/bin/bash
@@ -91,7 +95,7 @@ mount -t ext4 /dev/mmcblk0p2 /mnt/target || {
 
 tar --warning=no-timestamp --numeric-owner -C /mnt/target -xzf /surface2-rootfs-golden.tar.gz
 
-mkdir -p /mnt/target/{dev,proc,sys,tmp,run,mnt,boot/efi,etc/wpa_supplicant,root/.ssh}
+mkdir -p /mnt/target/{dev,proc,sys,tmp,run,mnt,boot/efi,etc/wpa_supplicant,root/.ssh,usr/local/bin}
 chmod 1777 /mnt/target/tmp
 chmod 700 /mnt/target/root/.ssh
 
@@ -103,10 +107,38 @@ FSTAB_EOF
 
 echo "surface2" > /mnt/target/etc/hostname
 
-# Copy Wi-Fi configuration and SSH keys if present
+# 1. Format and install Wi-Fi configuration cleanly (with robust syntax parser)
 if [ -f "/wpa_supplicant.conf" ]; then
-    cp -f "/wpa_supplicant.conf" /mnt/target/etc/wpa_supplicant/
+    mkdir -p /mnt/target/etc/wpa_supplicant
+    if grep -q "network={" /wpa_supplicant.conf 2>/dev/null && grep -q "psk=" /wpa_supplicant.conf 2>/dev/null; then
+        cp -f "/wpa_supplicant.conf" /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+    else
+        SSID=$(grep -iE '^(WIFI_SSID|ssid)=' /wpa_supplicant.conf | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
+        PSK=$(grep -iE '^(WIFI_PASSWORD|password|psk)=' /wpa_supplicant.conf | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
+        if [ -n "$SSID" ] && [ -n "$PSK" ]; then
+            cat << WPA_CONF_EOF > /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+ctrl_interface=/run/wpa_supplicant
+update_config=1
+country=US
+
+network={
+    ssid="$SSID"
+    psk="$PSK"
+    scan_ssid=1
+}
+WPA_CONF_EOF
+        fi
+    fi
     chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+fi
+
+# 2. Disable rc.local to eliminate duplicate service runs and console credential leakage
+rm -f /mnt/target/etc/rc.local
+
+# 3. Install updated autonomous online daemon
+if [ -f "/surface-online.sh" ]; then
+    cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
+    chmod 755 /mnt/target/usr/local/bin/surface-online.sh
 fi
 
 if [ -f "/authorized_keys" ]; then
@@ -167,10 +199,10 @@ def pad4(n):
     return b'\x00' * p
 
 def build():
-    print(f"Reading base ramdisk: {BASE_CPIO}...")
+    print(f"Reading base image: {SRC_INITRD}...")
     temp_out = OUT_INITRD + ".tmp"
-    with gzip.open(BASE_CPIO, 'rb') as f_in, gzip.open(temp_out, 'wb', compresslevel=1) as f_out:
-        # Stream existing CPIO files except old 'init' and 'TRAILER!!!'
+    with gzip.open(SRC_INITRD, 'rb') as f_in, gzip.open(temp_out, 'wb', compresslevel=1) as f_out:
+        # Stream existing CPIO files except replaced ones and 'TRAILER!!!'
         while True:
             magic = f_in.read(6)
             if not magic or magic != b'070701':
@@ -184,34 +216,32 @@ def build():
             f_in.read(pad)
 
             if name == 'TRAILER!!!':
-                # Skip trailer for now, we will add our payload files then a new trailer
                 f_in.read(filesize)
                 pad2 = (4 - (filesize % 4)) % 4
                 f_in.read(pad2)
                 break
 
-            if name in ('init', 'surface2-rootfs-golden.tar.gz', 'surface2-boot-golden.tar.gz'):
+            if name in ('init', 'surface-online.sh', 'usr/local/bin/surface-online.sh', 'wpa_supplicant.conf'):
                 # Skip replaced files
                 f_in.read(filesize)
                 pad2 = (4 - (filesize % 4)) % 4
                 f_in.read(pad2)
                 continue
 
-            # Write existing header and name
+            # Write existing entry
             entry_hdr = magic + fields + name_raw + (b'\x00' * pad)
             f_out.write(entry_hdr)
-            # Stream content
             remaining = filesize
             while remaining > 0:
-                chunk = f_in.read(min(remaining, 65536))
+                chunk = f_in.read(min(remaining, 1048576))
                 f_out.write(chunk)
                 remaining -= len(chunk)
             pad2 = (4 - (filesize % 4)) % 4
             pad_bytes = f_in.read(pad2)
             f_out.write(pad_bytes)
 
-        # 1. Write updated /init script
-        print("Injecting new /init installer script...")
+        # 1. Write updated /init installer script
+        print("Injecting hardened /init installer script...")
         init_data = INIT_SCRIPT.encode('utf-8')
         f_out.write(make_header('init', len(init_data), mode=0o100755))
         f_out.write(init_data)
@@ -219,9 +249,8 @@ def build():
 
         # 2. Add extra files
         extra_files = [
-            ('surface2-rootfs-golden.tar.gz', ROOTFS_TAR),
-            ('surface2-boot-golden.tar.gz', BOOT_TAR),
-            ('tegra114-microsoft-surface-2.dtb', DTB_FILE),
+            ('surface-online.sh', ONLINE_SH),
+            ('usr/local/bin/surface-online.sh', ONLINE_SH),
             ('wpa_supplicant.conf', WIFI_CONF),
             ('authorized_keys', SSH_KEY),
         ]
@@ -231,11 +260,12 @@ def build():
                 print(f"Skipping missing optional file: {src_path}")
                 continue
             sz = os.path.getsize(src_path)
-            print(f"Embedding {dest_name} ({sz / (1024*1024):.1f} MB)...")
-            f_out.write(make_header(dest_name, sz, mode=0o100644))
+            mode = 0o100755 if dest_name.endswith('.sh') else 0o100600
+            print(f"Embedding {dest_name} ({sz} bytes)...")
+            f_out.write(make_header(dest_name, sz, mode=mode))
             with open(src_path, 'rb') as f_src:
                 while True:
-                    chunk = f_src.read(1048576)
+                    chunk = f_src.read(65536)
                     if not chunk:
                         break
                     f_out.write(chunk)
@@ -247,7 +277,7 @@ def build():
 
     os.replace(temp_out, OUT_INITRD)
     final_sz = os.path.getsize(OUT_INITRD)
-    print(f"[OK] Standalone all-in-one initrd generated: {OUT_INITRD} ({final_sz / (1024*1024):.1f} MB)")
+    print(f"[OK] Hardened standalone initrd generated: {OUT_INITRD} ({final_sz / (1024*1024):.1f} MB)")
 
 if __name__ == '__main__':
     build()
