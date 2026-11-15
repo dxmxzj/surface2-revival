@@ -218,7 +218,11 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
             ensure_prop(ch, "status", b"okay\x00")
             ensure_prop(ch, "compatible", b"nvidia,tegra114-ehci\x00nvidia,tegra30-ehci\x00")
             ensure_prop(ch, "dr_mode", b"host\x00")
-            ensure_prop(ch, "nvidia,needs-double-reset", b"")
+            # Crucial for Tegra 114: do NOT set nvidia,needs-double-reset!
+            # In ci_hdrc_tegra.c, nvidia,needs-double-reset triggers tegra_usb_internal_port_reset(),
+            # which only asserts PORT_RESET for 10ms (causing -ETIMEDOUT = -110 on USB flash drives)
+            # and writes raw PORT_CSC (0x2) to PORTSC1, clearing PORT_POWER (bit 12)!
+            ch["props"] = [p for p in ch["props"] if p[0] != "nvidia,needs-double-reset"]
         elif ch["name"] == "usb-phy@7d000000":
             ensure_prop(ch, "status", b"okay\x00")
             ensure_prop(ch, "dr_mode", b"host\x00")
