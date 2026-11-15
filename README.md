@@ -74,6 +74,15 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
     ```
   - Configure `/etc/issue` to display the live `mlan0` IPv4 address (`\4{mlan0}`) and login instructions right on `tty1`.
 
+### Fix 6: Two-Tier Fast-Boot Installer Architecture (Strict Size Barrier: `initrd.gz` < 50 MB)
+- **Symptom:** Creating monolithic installer images (>400 MB) that bundle the rootfs archive inside the ramdisk causes Surface 2 UEFI to hang for 3+ minutes at the `"using DTB from command line"` step, resembling a hard crash.
+- **Root Cause:** Surface 2 UEFI USB 2.0 throughput is hardware-limited to ~2–5 MB/s. Reading 400+ MB before kernel handoff takes minutes.
+- **Permanent Architectural Invariant:**
+  1. `initrd.gz` MUST remain **under 50 MB** (containing only kernel modules, formatting utilities, and `/init`). It boots in **~2 seconds**.
+  2. The large payload archives (`surface2-rootfs-golden.tar.gz` and `surface2-boot-golden.tar.gz`) MUST sit as standalone files on the FAT32 filesystem of the installer media.
+  3. Once Linux boots, `/init` dynamically mounts the media (`/dev/sda1` or `/dev/mmcblk1p1`) and streams the payload directly to internal eMMC.
+  4. Monolithic image packing is strictly forbidden and actively asserted against in `scripts/build-usb-installer.sh`.
+
 ---
 
 ## 3. Step-by-Step Procedure for a New Surface 2

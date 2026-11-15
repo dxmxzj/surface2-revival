@@ -107,26 +107,43 @@ We encountered and solved five major hardware/kernel pitfalls on the Surface 2 (
 4. On the blue UEFI prompt, press physical **Volume Down** to select **Disable Secure Boot**.
    Secure Boot is now permanently disabled!
 
-### Phase 2: Boot Unattended Installer (Zero Typing / Standalone All-In-One USB)
-> [!NOTE]
-> Because Tegra 4 Linux kernel transceivers suspend standard Type-A USB storage devices after handoff, the installer embeds the complete golden boot and rootfs payloads directly inside the ramdisk (`initrd.gz`). UEFI loads the entire 435 MB environment into physical RAM over USB in ~25 seconds, eliminating any runtime USB driver or MicroSD dependency!
+### Phase 2: Boot Fast-Boot Unattended Installer (Zero Typing / No Keyboard Needed)
+> [!IMPORTANT]
+> **Architectural Rule: Two-Tier Fast Boot (`initrd.gz` < 50 MB)**
+> Surface 2 UEFI USB 2.0 throughput is restricted to ~2–5 MB/s. Monolithic (>400 MB) images cause a multi-minute hang at the DTB line that resembles a hardware freeze.
+> The installer strictly separates the bootloader from the payload:
+> - **Tier 1 (Fast Boot):** A lean 43 MB `initrd.gz` that UEFI loads in **~2 seconds**.
+> - **Tier 2 (Payload Stream):** The 393 MB rootfs archive (`surface2-rootfs-golden.tar.gz`) sits directly on the FAT32 filesystem of the USB drive (or MicroSD) and is mounted dynamically by `/init`.
 
-1. Copy the updated [`initrd.gz`](file:///mnt/d/surface2-usb-files/initrd.gz) and files from `D:\surface2-usb-files` to your FAT32 USB drive (`E:`).
+1. Copy the lean [`initrd.gz`](file:///mnt/d/surface2-usb-files/initrd.gz) and files from `D:\surface2-usb-files` to your FAT32 USB drive (`E:`).
 2. Insert the USB drive into the unlocked Surface 2 while powered off.
 3. Hold physical **Volume Down**, press and release **Power**, and keep holding **Volume Down** until the Surface logo appears with the loading dots.
 4. Release Volume Down.
 5. **Completely hands-off:**
-   - UEFI loads the kernel and all-in-one ramdisk into RAM (~25 seconds).
-   - The installer displays progress on the tablet screen (`/dev/tty1`):
-     - `[+] Embedded installer payload located in memory!`
+   - UEFI loads the kernel and lean ramdisk in **~2 seconds** (getting past the DTB line almost instantly).
+   - The installer displays live progress on the tablet screen (`/dev/tty1`):
+     - `[*] Scanning for installer media (USB / MicroSD)...`
+     - `[+] Found installer payload on /dev/sda1 (vfat)!`
      - `[1/4] Partitioning internal 32 GB eMMC (/dev/mmcblk0)...`
      - `[2/4] Formatting EFI and Root filesystems...`
      - `[3/4] Extracting Ubuntu 22.04 LTS Smart Display Rootfs (takes ~90s)...`
      - `[4/4] Installing UEFI Boot Chain & Golden DTB...`
-   - Wi-Fi and Dropbear SSH are also brought up in the background automatically.
-6. When complete, the tablet displays a 15-second countdown on screen:
-   - Unplug the USB drive during the countdown.
-   - The tablet automatically reboots directly from internal eMMC into Ubuntu 22.04 LTS!
+   - Wi-Fi credentials are automatically parsed (supporting any format), `rc.local` is sanitized so passwords are never printed to the screen, and background connectivity is enabled.
+6. When complete, the installer sits and prompts for manual media removal:
+   ```text
+   ==========================================================================
+    [SUCCESS] Surface 2 Ubuntu 22.04 LTS Installation COMPLETE!             
+   ==========================================================================
+    - Internal eMMC now contains the permanent Ubuntu 22.04 OS.              
+    - Dual 1080p Mirror (DSI + HDMI) and Touchscreen drivers are ready.      
+
+    >>> STEP 1: UNPLUG / REMOVE THE USB DRIVE (OR MEDIA) NOW <<<             
+
+    >>> STEP 2: Press [ENTER] to reboot (or hold Power button to turn off) <<<
+   ```
+7. Unplug the USB drive, then press **Enter** (or hold Power for 5s to turn off, then power back on).
+8. The Surface 2 boots directly from internal eMMC into Ubuntu 22.04 LTS!
+
 5. **Authorize Tailscale on the New Tablet:**
    - Once booted into Ubuntu 22.04 over Wi-Fi, SSH in and run:
      ```bash
