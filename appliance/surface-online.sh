@@ -88,8 +88,14 @@ find_wifi_iface() {
 }
 
 # Main supervision loop
+LAST_HDMI_STATE=""
 while true; do
-    # 1. Apply HDMI PHY fix if HDMI is connected (safe no-op if disconnected)
+    # 1. Keep internal display unblanked & apply HDMI PHY fix on hotplug/connected
+    CUR_HDMI_STATE=$(cat /sys/class/drm/card0-HDMI-A-1/status 2>/dev/null || echo "unknown")
+    if [ "$CUR_HDMI_STATE" != "$LAST_HDMI_STATE" ]; then
+        echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true
+        LAST_HDMI_STATE="$CUR_HDMI_STATE"
+    fi
     /usr/local/bin/surface-hdmi-phy.py 2>/dev/null || true
 
     # 2. Dynamic wireless interface discovery

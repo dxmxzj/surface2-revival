@@ -15,13 +15,14 @@ import gzip
 import io
 import time
 
-SRC_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
+SRC_INITRD = '/mnt/d/surface2-usb-files/initrd-lean.gz' if os.path.exists('/mnt/d/surface2-usb-files/initrd-lean.gz') else '/mnt/d/surface2-usb-files/initrd.gz'
 ROOTFS_TAR = '/mnt/d/surface2-usb-files/surface2-rootfs-golden.tar.gz'
 BOOT_TAR = '/mnt/d/surface2-usb-files/surface2-boot-golden.tar.gz'
 DTB_FILE = '/mnt/d/surface2-usb-files/tegra114-microsoft-surface-2.dtb'
 WIFI_CONF = '/mnt/d/surface2-usb-files/wpa_supplicant.conf'
 SSH_KEY = '/mnt/d/surface2-usb-files/authorized_keys'
 ONLINE_SH = '/home/dxm/surface2-revival/appliance/surface-online.sh'
+RECEIVER_PY = '/home/dxm/surface2-revival/appliance/surface2_smart_receiver.py'
 OUT_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
 
 INIT_SCRIPT = """#!/bin/bash
@@ -192,10 +193,14 @@ fi
 # 3. Disable rc.local to eliminate duplicate service runs and console credential leakage
 rm -f /mnt/target/etc/rc.local
 
-# 4. Install updated autonomous online daemon
+# 4. Install updated autonomous online daemon & smart receiver
 if [ -f "/surface-online.sh" ]; then
     cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
     chmod 755 /mnt/target/usr/local/bin/surface-online.sh
+fi
+if [ -f "/surface2_smart_receiver.py" ]; then
+    cp -f "/surface2_smart_receiver.py" /mnt/target/usr/local/bin/surface2_smart_receiver.py
+    chmod 755 /mnt/target/usr/local/bin/surface2_smart_receiver.py
 fi
 
 if [ -d /tmp/preserved_config/root_ssh ] && [ -f /tmp/preserved_config/root_ssh/authorized_keys ]; then
@@ -296,6 +301,7 @@ def build():
                 'init',
                 'surface-online.sh',
                 'usr/local/bin/surface-online.sh',
+                'surface2_smart_receiver.py',
                 'wpa_supplicant.conf',
                 'authorized_keys',
                 'surface2-rootfs-golden.tar.gz',
@@ -331,6 +337,7 @@ def build():
         extra_files = [
             ('surface-online.sh', ONLINE_SH),
             ('usr/local/bin/surface-online.sh', ONLINE_SH),
+            ('surface2_smart_receiver.py', RECEIVER_PY),
             ('wpa_supplicant.conf', WIFI_CONF),
             ('authorized_keys', SSH_KEY),
             ('surface2-rootfs-golden.tar.gz', ROOTFS_TAR),

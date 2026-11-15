@@ -413,6 +413,7 @@ class DualOverlayStreamPlayer:
 
             mm_view = memoryview(mm)
             plane_enabled = False
+            hdmi_plane_enabled = False
             frame_count = 0
             t0 = time.monotonic()
 
@@ -426,8 +427,19 @@ class DualOverlayStreamPlayer:
                 if pos < self.frame_sz:
                     break
 
-                if not plane_enabled:
+                hdmi_now = False
+                try:
+                    with open("/sys/class/drm/card0-HDMI-A-1/enabled", "r") as hf:
+                        hdmi_now = (hf.read().strip() == "enabled")
+                except Exception:
+                    pass
+
+                if not plane_enabled or (hdmi_now and not hdmi_plane_enabled):
+                    if hdmi_now:
+                        apply_hdmi_phy_fix()
                     for plane_id, crtc_id in DUAL_OVERLAY_TARGETS:
+                        if plane_id == 42 and not hdmi_now:
+                            continue
                         try:
                             sbuf = struct.pack(
                                 "<IIIIiiIIIIII",
@@ -436,9 +448,13 @@ class DualOverlayStreamPlayer:
                                 0, 0, self.h << 16, self.w << 16
                             )
                             fcntl.ioctl(drm_fd, DRM_IOCTL_MODE_SETPLANE, bytearray(sbuf))
+                            if plane_id == 42:
+                                hdmi_plane_enabled = True
                         except Exception:
                             pass
                     plane_enabled = True
+                elif not hdmi_now:
+                    hdmi_plane_enabled = False
 
                 frame_count += 1
                 if frame_count % 30 == 0:

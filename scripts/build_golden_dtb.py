@@ -156,7 +156,7 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                             for rnode in sub["children"]:
                                 if rnode["name"] == "regulators":
                                     for reg in rnode["children"]:
-                                        if reg["name"] in ("regen1", "regen2", "ldoln", "ldo9"):
+                                        if reg["name"] in ("regen1", "regen2", "ldoln", "ldo9", "ldo3"):
                                             ensure_prop(reg, "regulator-always-on", b"")
                                             ensure_prop(reg, "regulator-boot-on", b"")
                                     if not any(r["name"] == "ldo4" for r in rnode["children"]):
@@ -172,9 +172,9 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                                             }
                                         )
 
-    # 2. Top-level fixed regulators (what_ever, regulator-usb3, touchscreen_vdd)
+    # 2. Top-level fixed regulators (what_ever, regulator-usb3, touchscreen_vdd, stub_sd)
     for ch in root["children"]:
-        if ch["name"] in ("what_ever", "regulator-usb3", "touchscreen_vdd"):
+        if ch["name"] in ("what_ever", "regulator-usb3", "touchscreen_vdd", "stub_sd"):
             ensure_prop(ch, "regulator-always-on", b"")
             ensure_prop(ch, "regulator-boot-on", b"")
 
