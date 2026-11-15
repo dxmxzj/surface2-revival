@@ -1,0 +1,6 @@
+#!/bin/sh
+case "$1" in
+    poweroff|halt)
+        /usr/bin/python3 /usr/local/bin/surface-panel-reset.py --off-only >/dev/kmsg 2>&1 || true
+        ;;
+esac
