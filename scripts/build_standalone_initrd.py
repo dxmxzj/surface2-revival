@@ -62,12 +62,56 @@ if [ ! -f "/surface2-rootfs-golden.tar.gz" ]; then
     while true; do setsid /bin/bash </dev/tty1 >/dev/tty1 2>&1; sleep 1; done
 fi
 
-echo "[1/4] Partitioning internal 32 GB eMMC (/dev/mmcblk0)..."
-for part in /dev/mmcblk0p*; do
-    umount "$part" 2>/dev/null || true
-done
+# Check for existing Linux installation on /dev/mmcblk0p2 (smart config preservation)
+EXISTING_INSTALL=0
+mkdir -p /mnt/check
+if mount -t ext4 -o ro /dev/mmcblk0p2 /mnt/check 2>/dev/null; then
+    if [ -f /mnt/check/etc/os-release ]; then
+        EXISTING_INSTALL=1
+    fi
+    umount /mnt/check 2>/dev/null || true
+fi
 
-sfdisk --force /dev/mmcblk0 << 'PART_EOF'
+mkdir -p /tmp/preserved_config
+
+if [ "$EXISTING_INSTALL" -eq 1 ]; then
+    echo "=========================================================================="
+    echo " [*] EXISTING LINUX INSTALLATION DETECTED ON /dev/mmcblk0p2!              "
+    echo " [*] PRESERVING CONFIGURATION: Tailscale, Wi-Fi, SSH keys, Hostname       "
+    echo "=========================================================================="
+    mkdir -p /mnt/target
+    mount -t ext4 /dev/mmcblk0p2 /mnt/target 2>/dev/null || true
+    if [ -d /mnt/target/var/lib/tailscale ]; then
+        echo " [+] Preserving Tailscale machine identity & login..."
+        mkdir -p /tmp/preserved_config/tailscale
+        cp -a /mnt/target/var/lib/tailscale/* /tmp/preserved_config/tailscale/ 2>/dev/null || true
+    fi
+    if [ -f /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf ]; then
+        echo " [+] Preserving existing Wi-Fi configuration..."
+        mkdir -p /tmp/preserved_config/wpa_supplicant
+        cp -a /mnt/target/etc/wpa_supplicant/* /tmp/preserved_config/wpa_supplicant/ 2>/dev/null || true
+    fi
+    if [ -d /mnt/target/etc/ssh ]; then
+        echo " [+] Preserving SSH host keys..."
+        mkdir -p /tmp/preserved_config/etc_ssh
+        cp -a /mnt/target/etc/ssh/ssh_host_* /tmp/preserved_config/etc_ssh/ 2>/dev/null || true
+    fi
+    if [ -f /mnt/target/root/.ssh/authorized_keys ]; then
+        mkdir -p /tmp/preserved_config/root_ssh
+        cp -a /mnt/target/root/.ssh/* /tmp/preserved_config/root_ssh/ 2>/dev/null || true
+    fi
+    if [ -f /mnt/target/etc/hostname ]; then
+        cp -a /mnt/target/etc/hostname /tmp/preserved_config/
+    fi
+    umount /mnt/target 2>/dev/null || true
+    echo ""
+else
+    echo "[1/4] Partitioning internal 32 GB eMMC (/dev/mmcblk0)..."
+    for part in /dev/mmcblk0p*; do
+        umount "$part" 2>/dev/null || true
+    done
+
+    sfdisk --force /dev/mmcblk0 << 'PART_EOF'
 label: gpt
 unit: sectors
 first-lba: 2048
@@ -77,14 +121,15 @@ last-lba: 61071326
 /dev/mmcblk0p2 : start=264192, size=60807135, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="Linux"
 PART_EOF
 
-sync
-sleep 2
-partprobe /dev/mmcblk0 2>/dev/null || true
-sleep 1
+    sync
+    sleep 2
+    partprobe /dev/mmcblk0 2>/dev/null || true
+    sleep 1
 
-echo "[2/4] Formatting EFI and Root filesystems..."
-mkfs.vfat -F 32 -n "EFI" /dev/mmcblk0p1
-mkfs.ext4 -F -L "surface-root" /dev/mmcblk0p2
+    echo "[2/4] Formatting EFI and Root filesystems..."
+    mkfs.vfat -F 32 -n "EFI" /dev/mmcblk0p1
+    mkfs.ext4 -F -L "surface-root" /dev/mmcblk0p2
+fi
 
 echo "[3/4] Extracting Ubuntu 22.04 LTS Smart Display Rootfs (takes ~90s)..."
 mkdir -p /mnt/target
@@ -107,8 +152,20 @@ FSTAB_EOF
 
 echo "surface2" > /mnt/target/etc/hostname
 
-# 1. Format and install Wi-Fi configuration cleanly (with robust syntax parser)
-if [ -f "/wpa_supplicant.conf" ]; then
+# 1. Restore Tailscale credentials if preserved
+if [ -d /tmp/preserved_config/tailscale ] && [ "$(ls -A /tmp/preserved_config/tailscale 2>/dev/null)" ]; then
+    echo " [+] Restoring preserved Tailscale authentication..."
+    mkdir -p /mnt/target/var/lib/tailscale
+    cp -a /tmp/preserved_config/tailscale/* /mnt/target/var/lib/tailscale/
+    chmod 600 /mnt/target/var/lib/tailscale/* 2>/dev/null || true
+fi
+
+# 2. Restore or install Wi-Fi configuration
+if [ -d /tmp/preserved_config/wpa_supplicant ] && [ -f /tmp/preserved_config/wpa_supplicant/wpa_supplicant.conf ]; then
+    echo " [+] Restoring preserved Wi-Fi network settings..."
+    cp -a /tmp/preserved_config/wpa_supplicant/* /mnt/target/etc/wpa_supplicant/
+    chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+elif [ -f "/wpa_supplicant.conf" ]; then
     mkdir -p /mnt/target/etc/wpa_supplicant
     if grep -q "network={" /wpa_supplicant.conf 2>/dev/null && grep -q "psk=" /wpa_supplicant.conf 2>/dev/null; then
         cp -f "/wpa_supplicant.conf" /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
@@ -132,22 +189,36 @@ WPA_CONF_EOF
     chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
 fi
 
-# 2. Disable rc.local to eliminate duplicate service runs and console credential leakage
+# 3. Disable rc.local to eliminate duplicate service runs and console credential leakage
 rm -f /mnt/target/etc/rc.local
 
-# 3. Install updated autonomous online daemon
+# 4. Install updated autonomous online daemon
 if [ -f "/surface-online.sh" ]; then
     cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
     chmod 755 /mnt/target/usr/local/bin/surface-online.sh
 fi
 
-if [ -f "/authorized_keys" ]; then
+if [ -d /tmp/preserved_config/root_ssh ] && [ -f /tmp/preserved_config/root_ssh/authorized_keys ]; then
+    cp -a /tmp/preserved_config/root_ssh/* /mnt/target/root/.ssh/
+    chmod 600 /mnt/target/root/.ssh/authorized_keys
+elif [ -f "/authorized_keys" ]; then
     cp -f "/authorized_keys" /mnt/target/root/.ssh/
     chmod 600 /mnt/target/root/.ssh/authorized_keys
 fi
 
-# Generate host keys
-chroot /mnt/target ssh-keygen -A 2>/dev/null || true
+if [ -f /tmp/preserved_config/hostname ]; then
+    cp -a /tmp/preserved_config/hostname /mnt/target/etc/hostname
+fi
+
+# 5. Restore or generate SSH host keys
+if [ -d /tmp/preserved_config/etc_ssh ] && [ "$(ls -A /tmp/preserved_config/etc_ssh 2>/dev/null)" ]; then
+    echo " [+] Restoring preserved SSH host keys..."
+    cp -a /tmp/preserved_config/etc_ssh/* /mnt/target/etc/ssh/
+    chmod 600 /mnt/target/etc/ssh/ssh_host_*_key 2>/dev/null || true
+    chmod 644 /mnt/target/etc/ssh/ssh_host_*_key.pub 2>/dev/null || true
+else
+    chroot /mnt/target ssh-keygen -A 2>/dev/null || true
+fi
 
 echo "[4/4] Installing UEFI Boot Chain & Golden DTB to /dev/mmcblk0p1..."
 mount -t vfat /dev/mmcblk0p1 /mnt/target/boot/efi
@@ -221,7 +292,16 @@ def build():
                 f_in.read(pad2)
                 break
 
-            if name in ('init', 'surface-online.sh', 'usr/local/bin/surface-online.sh', 'wpa_supplicant.conf'):
+            if name in (
+                'init',
+                'surface-online.sh',
+                'usr/local/bin/surface-online.sh',
+                'wpa_supplicant.conf',
+                'authorized_keys',
+                'surface2-rootfs-golden.tar.gz',
+                'surface2-boot-golden.tar.gz',
+                'tegra114-microsoft-surface-2.dtb',
+            ):
                 # Skip replaced files
                 f_in.read(filesize)
                 pad2 = (4 - (filesize % 4)) % 4
@@ -253,6 +333,9 @@ def build():
             ('usr/local/bin/surface-online.sh', ONLINE_SH),
             ('wpa_supplicant.conf', WIFI_CONF),
             ('authorized_keys', SSH_KEY),
+            ('surface2-rootfs-golden.tar.gz', ROOTFS_TAR),
+            ('surface2-boot-golden.tar.gz', BOOT_TAR),
+            ('tegra114-microsoft-surface-2.dtb', DTB_FILE),
         ]
 
         for dest_name, src_path in extra_files:
