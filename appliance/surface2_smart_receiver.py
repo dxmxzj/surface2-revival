@@ -121,17 +121,17 @@ class DrmMasterManager:
         mode_bytes = bytes(buf[36:104])
         return fb_id, mode_valid, mode_bytes
 
-    def _get_encoder_crtc(self, fd, enc_id, crtc_list):
+    def _get_encoder_crtc(self, fd, enc_id, crtc_list, avoid_crtc=None):
         if not enc_id:
             return None
         ebuf = bytearray(0x14)
         struct.pack_into("<I", ebuf, 0, enc_id)
         fcntl.ioctl(fd, DRM_IOCTL_MODE_GETENCODER, ebuf)
         _, _, cur_crtc, possible_crtcs, _ = struct.unpack_from("<IIIII", ebuf, 0)
-        if cur_crtc:
+        if cur_crtc and cur_crtc != avoid_crtc:
             return cur_crtc
         for idx, cid in enumerate(crtc_list):
-            if possible_crtcs & (1 << idx):
+            if (possible_crtcs & (1 << idx)) and cid != avoid_crtc:
                 return cid
         return None
 
@@ -156,11 +156,25 @@ class DrmMasterManager:
         crtc_list = [crtc_buf[i] for i in range(count_crtcs)]
         fallback_fb = fb_buf[0] if count_fbs > 0 else 0
 
+        # First pass: find DSI CRTC so HDMI never picks the same CRTC
+        dsi_crtc_id = 98 if 98 in crtc_list else (crtc_list[-1] if crtc_list else 98)
+        for cid in conn_buf:
+            c = bytearray(0x50)
+            struct.pack_into("<I", c, 48, cid)
+            fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c)
+            enc_id = struct.unpack_from("<I", c, 44)[0]
+            conn_type = struct.unpack_from("<I", c, 52)[0]
+            if conn_type == DRM_MODE_CONNECTOR_DSI:
+                resolved = self._get_encoder_crtc(fd, enc_id, crtc_list)
+                if resolved:
+                    dsi_crtc_id = resolved
+                break
+
         hdmi_cid = None
         hdmi_connected = False
         chosen_mode = None
-        hdmi_crtc_id = 64
-        dsi_crtc_id = 98
+        other_crtcs = [c for c in crtc_list if c != dsi_crtc_id]
+        hdmi_crtc_id = other_crtcs[0] if other_crtcs else 64
 
         for cid in conn_buf:
             c = bytearray(0x50)
@@ -170,12 +184,6 @@ class DrmMasterManager:
             enc_id = struct.unpack_from("<I", c, 44)[0]
             conn_type = struct.unpack_from("<I", c, 52)[0]
             connection = struct.unpack_from("<I", c, 60)[0]
-
-            if conn_type == DRM_MODE_CONNECTOR_DSI:
-                resolved = self._get_encoder_crtc(fd, enc_id, crtc_list)
-                if resolved:
-                    dsi_crtc_id = resolved
-                continue
 
             if conn_type != DRM_MODE_CONNECTOR_HDMIA:
                 continue
@@ -197,7 +205,7 @@ class DrmMasterManager:
             struct.pack_into("<I", c2, 48, cid)
             fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c2)
 
-            resolved = self._get_encoder_crtc(fd, enc_id or (encs_buf[0] if count_enc > 0 else 0), crtc_list)
+            resolved = self._get_encoder_crtc(fd, enc_id or (encs_buf[0] if count_enc > 0 else 0), crtc_list, avoid_crtc=dsi_crtc_id)
             if resolved:
                 hdmi_crtc_id = resolved
 
@@ -256,10 +264,9 @@ class DrmMasterManager:
                 else:
                     self._log(f"HDMI connected but missing fb_id={fb_id} or mode={bool(mode_bytes)}")
             elif not connected and enabled:
-                sc = bytearray(0x68)
-                struct.pack_into("<QIIIIIIIII", sc, 0, 0, 0, hdmi_crtc_id, 0, 0, 0, 0, 0, 0, 0)
-                fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
-                self._log(f"Disabled HDMI-A-1 on CRTC {hdmi_crtc_id} (DSI CRTC {dsi_crtc_id} untouched)")
+                # Keep CRTC 64 (dc@54200000 / DISA) enabled on Tegra 114: disabling DISA
+                # powergates shared display logic and causes DSI-1 (CRTC 98) to go black.
+                self._log(f"HDMI unplugged; keeping CRTC {hdmi_crtc_id} active so DSI CRTC {dsi_crtc_id} stays on")
         except Exception as e:
             self._log(f"sync_hdmi_hotplug error: {e}")
 
