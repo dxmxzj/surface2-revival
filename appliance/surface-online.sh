@@ -18,22 +18,42 @@ python3 -c '
 import mmap, os, struct
 try:
     fd = os.open("/dev/mem", os.O_RDWR | os.O_SYNC)
+    # 1. CAR (0x60006000): deassert XUSB_PADCTL reset (W_CLR 0x43c bit 14),
+    #    assert XUSB_HOST/DEV (U_SET 0x310) & XUSB_SS (W_SET 0x438) resets,
+    #    clear UTMIPLL IDDQ override (0x52c)
     car = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=0x60006000)
-    rst_w = struct.unpack("<I", car[0x35c:0x360])[0]
-    car[0x35c:0x360] = struct.pack("<I", rst_w & ~0x4000)
+    car[0x43c:0x440] = struct.pack("<I", 0x00004000)
+    car[0x310:0x314] = struct.pack("<I", 0x82000000)
+    car[0x438:0x43c] = struct.pack("<I", 0x10000000)
+    pwrdn = struct.unpack("<I", car[0x52c:0x530])[0]
+    car[0x52c:0x530] = struct.pack("<I", (pwrdn & ~0x2) | 0x1)
     car.close()
+    # 2. XUSB_PADCTL (0x7009f000): Tegra 114 register offsets
     pad = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=0x7009f000)
     elpg = struct.unpack("<I", pad[0x01c:0x020])[0]
-    pad[0x01c:0x020] = struct.pack("<I", elpg & ~0x07000000)
-    mux = struct.unpack("<I", pad[0x004:0x008])[0]
-    pad[0x004:0x008] = struct.pack("<I", mux & ~0x000c0003)
-    ctl0 = struct.unpack("<I", pad[0x0a0:0x0a4])[0]
-    pad[0x0a0:0x0a4] = struct.pack("<I", ctl0 & ~0x00380000)
-    ctl1 = struct.unpack("<I", pad[0x0ac:0x0b0])[0]
-    pad[0x0ac:0x0b0] = struct.pack("<I", ctl1 & ~0x00000004)
-    bias = struct.unpack("<I", pad[0x0b8:0x0bc])[0]
-    pad[0x0b8:0x0bc] = struct.pack("<I", bias & ~0x00001000)
+    pad[0x01c:0x020] = struct.pack("<I", (elpg & ~0x07000000) | 0x00770000)
+    pad[0x004:0x008] = struct.pack("<I", 0x00000000)
+    pad[0x00c:0x010] = struct.pack("<I", 0x000001ff)
+    pad[0x010:0x014] = struct.pack("<I", 0x0000003f)
+    for off in (0x090, 0x094):
+        v = struct.unpack("<I", pad[off:off+4])[0]
+        pad[off:off+4] = struct.pack("<I", v & ~0x00380000)
+    for off in (0x098, 0x09c):
+        v = struct.unpack("<I", pad[off:off+4])[0]
+        pad[off:off+4] = struct.pack("<I", v & ~0x00000004)
+    bias = struct.unpack("<I", pad[0x0a0:0x0a4])[0]
+    pad[0x0a0:0x0a4] = struct.pack("<I", bias & ~0x00003000)
     pad.close()
+    # 3. PMC (0x7000e400): clear Port 0 AO powerdown & sleepwalk, enable bias master
+    pmc = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=0x7000e000)
+    ao = struct.unpack("<I", pmc[0x4f0:0x4f4])[0]
+    pmc[0x4f0:0x4f4] = struct.pack("<I", ao & ~0xf)
+    slp = struct.unpack("<I", pmc[0x5fc:0x600])[0]
+    pmc[0x5fc:0x600] = struct.pack("<I", (slp & ~0xff) | 0xc0)
+    pmc[0x5ec:0x5f0] = struct.pack("<I", 0x00001001)
+    bm = struct.unpack("<I", pmc[0x670:0x674])[0]
+    pmc[0x670:0x674] = struct.pack("<I", bm | 0x2)
+    pmc.close()
     os.close(fd)
 except Exception as e:
     pass

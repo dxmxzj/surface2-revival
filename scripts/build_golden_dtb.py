@@ -210,7 +210,9 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                     # Crucial: remove hdmi-supply so HDMI power management never disables regulator-usb3 (0x18)
                     sub["props"] = [p for p in sub["props"] if p[0] != "hdmi-supply"]
 
-    # 5. External USB 2.0 host port (usb@7d000000) and disable unused controller 3 (usb@7d008000)
+    # 5. External USB 2.0 host port (usb@7d000000 / UTMI Pad 0) and disable unused HSIC controller 3 (usb@7d008000)
+    #    Crucial for Tegra 114: do NOT set nvidia,xcvr-setup-use-fuses (Tegra 114 clears FUSE_SETUP_SEL in UTMIP_SPARE_CFG0
+    #    and uses software/DT nvidia,xcvr-setup = <9>).
     for ch in root["children"]:
         if ch["name"] == "usb@7d000000":
             ensure_prop(ch, "status", b"okay\x00")
@@ -221,7 +223,7 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
             ensure_prop(ch, "status", b"okay\x00")
             ensure_prop(ch, "dr_mode", b"host\x00")
             ensure_prop(ch, "vbus-supply", struct.pack(">I", 0x18))
-            ensure_prop(ch, "nvidia,xcvr-setup-use-fuses", b"")
+            ch["props"] = [p for p in ch["props"] if p[0] != "nvidia,xcvr-setup-use-fuses"]
         elif ch["name"] == "usb@7d008000":
             ensure_prop(ch, "status", b"disabled\x00")
         elif ch["name"] == "usb-phy@7d008000":

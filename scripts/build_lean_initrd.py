@@ -63,53 +63,138 @@ mmio_write() {
     /usr/bin/devmem2 "$1" w "$2" >/dev/null 2>&1
 }
 
+tegra_usb_keep_awake() {
+    for d in /sys/bus/platform/devices/7d000000.usb* /sys/bus/platform/devices/ci_hdrc* /sys/bus/usb/devices/usb* /sys/bus/usb/devices/1-*; do
+        [ -e "$d/power/control" ] && echo on > "$d/power/control" 2>/dev/null || true
+    done
+}
+
 tegra_usb_mux_handoff() {
     [ -x /usr/bin/devmem2 ] || return 0
-    # 1. Ensure XUSB_PADCTL (reset 142 = bit 14 of CAR RST_DEVICES_W 0x6000635c) is out of reset
-    RST_W=$(mmio_read 0x6000635c)
-    if [ -n "$RST_W" ]; then
-        mmio_write 0x6000635c $(printf "0x%x" $(( RST_W & ~0x4000 )))
-    fi
-    # 2. Release XUSB_PADCTL_ELPG_PROGRAM (0x7009f01c) AUX_MUX LP0 clamps (bits 24..26)
+    tegra_usb_keep_awake
+
+    # 1. CAR (0x60006000):
+    #    - Deassert XUSB_PADCTL reset (bit 14 of RST_DEV_W_CLR 0x6000643c)
+    #    - Assert XUSB_HOST (bit 25) & XUSB_DEV (bit 31) in RST_DEV_U_SET (0x60006310)
+    #      and XUSB_SS (bit 28) in RST_DEV_W_SET (0x60006438) so UEFI XUSB releases the port
+    #    - Clear UTMIPLL IDDQ override in UTMIPLL_HW_PWRDN_CFG0 (0x6000652c)
+    mmio_write 0x6000643c 0x00004000
+    mmio_write 0x60006310 0x82000000
+    mmio_write 0x60006438 0x10000000
+    PWRDN=$(mmio_read 0x6000652c)
+    [ -n "$PWRDN" ] && mmio_write 0x6000652c $(printf "0x%x" $(( (PWRDN & ~0x2) | 0x1 )))
+
+    # 2. XUSB_PADCTL (0x7009f000) — Tegra 114 register offsets (nv_xhci_tegra.c tegra114_padctl_offsets):
+    #    - 0x01c (ELPG_PROGRAM_0): clear AUX_MUX_LP0_CLAMP* (bits 24..26) & clamp SSP0/SSP1 (bits 16..22 = 0x00770000)
+    #      so any USB 3.0 flash drive drops out of SuperSpeed into USB 2.0 High-Speed
+    #    - 0x004 (USB2_PAD_MUX_0): write 0x0 so BOTH UTMI Pad 0 (bits [1:0]) & UTMI Pad 1 (bits [3:2])
+    #      and Bias Pad (bits [19:18]) are owned by SNPS (required by tegra_xhci_war_for_tctrl_rctrl)
+    #    - 0x00c (SNPS_OC_MAP_0 = 0x1ff) & 0x010 (USB2_OC_MAP_0 = 0x3f): disable false overcurrent
+    #    - 0x090 / 0x094 (USB2_OTG_PAD0/1_CTL_0): clear PD (1<<19), PD2 (1<<20), PD_ZI (1<<21)
+    #    - 0x098 / 0x09c (USB2_OTG_PAD0/1_CTL_1): clear PD_DR (1<<2)
+    #    - 0x0a0 (USB2_BIAS_PAD_CTL_0): clear PD (1<<12) & PD_TRK (1<<13)
     ELPG=$(mmio_read 0x7009f01c)
     if [ -n "$ELPG" ]; then
-        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x01000000 )))
-        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x03000000 )))
-        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x07000000 )))
+        mmio_write 0x7009f01c $(printf "0x%x" $(( (ELPG & ~0x07000000) | 0x00770000 )))
     fi
-    # 3. Route UTMI Pad 0 (bits [1:0]) & UTMI Bias Pad (bits [19:18]) in XUSB_PADCTL_USB2_PAD_MUX (0x7009f004)
-    #    from XUSB (1) to SNPS / usb@7d000000 (0)
-    MUX=$(mmio_read 0x7009f004)
-    if [ -n "$MUX" ]; then
-        mmio_write 0x7009f004 $(printf "0x%x" $(( MUX & ~0x000c0003 )))
-    fi
-    # 4. Clear power-down bits on XUSB_PADCTL_USB2_OTG_PAD0_CTL0/1 & BIAS_PAD_CTL0
-    CTL0=$(mmio_read 0x7009f0a0)
-    [ -n "$CTL0" ] && mmio_write 0x7009f0a0 $(printf "0x%x" $(( CTL0 & ~0x00380000 )))
-    CTL1=$(mmio_read 0x7009f0ac)
-    [ -n "$CTL1" ] && mmio_write 0x7009f0ac $(printf "0x%x" $(( CTL1 & ~0x00000004 )))
-    BIAS=$(mmio_read 0x7009f0b8)
-    [ -n "$BIAS" ] && mmio_write 0x7009f0b8 $(printf "0x%x" $(( BIAS & ~0x00001000 )))
-    # 5. Ensure GPIO PK1 (OUDD 0x6000d2a8 in Surface 2 ACPI SSDT) is enabled and HIGH
+    mmio_write 0x7009f004 0x00000000
+    mmio_write 0x7009f00c 0x000001ff
+    mmio_write 0x7009f010 0x0000003f
+
+    for addr in 0x7009f090 0x7009f094; do
+        V=$(mmio_read "$addr")
+        [ -n "$V" ] && mmio_write "$addr" $(printf "0x%x" $(( V & ~0x00380000 )))
+    done
+    for addr in 0x7009f098 0x7009f09c; do
+        V=$(mmio_read "$addr")
+        [ -n "$V" ] && mmio_write "$addr" $(printf "0x%x" $(( V & ~0x00000004 )))
+    done
+    BIAS=$(mmio_read 0x7009f0a0)
+    [ -n "$BIAS" ] && mmio_write 0x7009f0a0 $(printf "0x%x" $(( BIAS & ~0x00003000 )))
+
+    # 3. PMC (0x7000e400):
+    #    - Clear Port 0 power-down bits [3:0] in PMC_USB_AO (0x7000e4f0)
+    #    - Disable PMC sleepwalk master control on Port 0 in PMC_SLEEP_CFG (0x7000e5fc)
+    #    - Clear walk pointer & wake alarm in PMC_TRIGGERS (0x7000e5ec)
+    #    - Enable BIAS_MASTER_PROG_VAL (bit 1) in PMC_UTMIP_BIAS_MASTER_CNTRL (0x7000e670)
+    AO=$(mmio_read 0x7000e4f0)
+    [ -n "$AO" ] && mmio_write 0x7000e4f0 $(printf "0x%x" $(( AO & ~0xf )))
+    SLP=$(mmio_read 0x7000e5fc)
+    [ -n "$SLP" ] && mmio_write 0x7000e5fc $(printf "0x%x" $(( (SLP & ~0xff) | 0xc0 )))
+    mmio_write 0x7000e5ec 0x00001001
+    BM=$(mmio_read 0x7000e670)
+    [ -n "$BM" ] && mmio_write 0x7000e670 $(printf "0x%x" $(( BM | 0x2 )))
+
+    # 4. Ensure GPIO PK1 (5V VBUS on external USB port, 0x6000d2a8) is enabled and HIGH
     mmio_write 0x6000d288 0x0202
     mmio_write 0x6000d298 0x0202
     mmio_write 0x6000d2a8 0x0202
-    # 6. Keep USB1 controller and PHY out of runtime suspend
-    for d in /sys/bus/platform/devices/7d000000.usb* /sys/bus/platform/devices/ci_hdrc* /sys/bus/usb/devices/usb*; do
-        [ -e "$d/power/control" ] && echo on > "$d/power/control" 2>/dev/null || true
-    done
+
+    # 5. If USB1 (0x7d000000) has probed, ensure PHY & UTMIP transceivers are awake and calibrated
+    if [ -d /sys/bus/usb/devices/usb1 ]; then
+        tegra_usb_keep_awake
+        SUSP=$(mmio_read 0x7d000400)
+        if [ -n "$SUSP" ]; then
+            # Clear USB_SUSP_SET (bit 14) & UTMIP_RESET (bit 11), set UTMIP_PHY_ENABLE (bit 12)
+            mmio_write 0x7d000400 $(printf "0x%x" $(( (SUSP & ~0x4800) | 0x1000 )))
+        fi
+        DEVLC=$(mmio_read 0x7d0001b4)
+        if [ -n "$DEVLC" ] && [ $(( DEVLC & 0x00400000 )) -ne 0 ]; then
+            # Clear HOSTPC1_DEVLC_PHCD (bit 22)
+            mmio_write 0x7d0001b4 $(printf "0x%x" $(( DEVLC & ~0x00400000 )))
+        fi
+        # Ensure UTMIP_BIAS_CFG0 (0x7d00080c) has OTGPD (bit 11) & BIASPD (bit 10) cleared
+        BCFG0=$(mmio_read 0x7d00080c)
+        [ -n "$BCFG0" ] && mmio_write 0x7d00080c $(printf "0x%x" $(( BCFG0 & ~0x00000c00 )))
+        # Ensure UTMIP_XCVR_CFG0 (0x7d000808) & CFG1 (0x7d000838) power-down bits are cleared
+        XCFG0=$(mmio_read 0x7d000808)
+        [ -n "$XCFG0" ] && mmio_write 0x7d000808 $(printf "0x%x" $(( XCFG0 & ~0x00054000 )))
+        XCFG1=$(mmio_read 0x7d000838)
+        [ -n "$XCFG1" ] && mmio_write 0x7d000838 $(printf "0x%x" $(( XCFG1 & ~0x00000015 )))
+        # Tegra 114 UTMIP_SPARE_CFG0 (0x7d000834): clear FUSE_SETUP_SEL (bit 3), set FUSE_ATERM_SEL (bit 4)
+        SPARE=$(mmio_read 0x7d000834)
+        [ -n "$SPARE" ] && mmio_write 0x7d000834 $(printf "0x%x" $(( (SPARE & ~0x8) | 0x10 )))
+        # Run Tegra 114 UTMIP bias tracking (utmi_phy_set_snps_trking_data in tegra_usb_pmc.c)
+        BCFG1=$(mmio_read 0x7d00083c)
+        if [ -n "$BCFG1" ]; then
+            mmio_write 0x7d00083c $(printf "0x%x" $(( (BCFG1 & ~0xf9) | 0x2a )))
+            BM=$(mmio_read 0x7000e670)
+            [ -n "$BM" ] && mmio_write 0x7000e670 $(printf "0x%x" $(( BM & ~0x2 )))
+            [ -n "$BM" ] && mmio_write 0x7000e670 $(printf "0x%x" $(( BM | 0x2 )))
+            mmio_write 0x7d00083c $(printf "0x%x" $(( (BCFG1 & ~0xf9) | 0x29 )))
+        fi
+        # Ensure PORTSC1 (0x7d000184) has PORT_POWER (bit 12 = 0x1000) enabled (masking RWC bits 0x2a)
+        PSC=$(mmio_read 0x7d000184)
+        if [ -n "$PSC" ] && [ $(( PSC & 0x1000 )) -eq 0 ]; then
+            mmio_write 0x7d000184 $(printf "0x%x" $(( (PSC & ~0x2a) | 0x1000 )))
+        fi
+    fi
+}
+
+tegra_usb_vbus_cycle() {
+    # Power-cycle 5V VBUS (GPIO PK1 0x6000d2a8) WITHOUT unbinding 7d000000.usb
+    # so any USB 3.0 flash drive stuck in UEFI SuperSpeed mode resets and connects on USB 2.0 High-Speed
+    tegra_usb_keep_awake
+    mmio_write 0x6000d2a8 0x0200
+    sleep 1
+    tegra_usb_mux_handoff
+    mmio_write 0x6000d2a8 0x0202
+    sleep 1
+    tegra_usb_mux_handoff
 }
 
 echo "[*] Handing off external USB port mux (XUSB_PADCTL -> USB1 EHCI)..."
 PAD_MUX_BEFORE=$(mmio_read 0x7009f004)
 tegra_usb_mux_handoff
-if [ -e /sys/bus/platform/drivers/tegra-usb/7d000000.usb ]; then
-    echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/unbind 2>/dev/null || true
-    sleep 1
-    tegra_usb_mux_handoff
-    echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/bind 2>/dev/null || true
-    tegra_usb_mux_handoff
-fi
+# Wait up to 8s for 7d000000.usb (usb1) deferred probe to complete and immediately lock runtime PM ON
+for w in $(seq 1 16); do
+    tegra_usb_keep_awake
+    if [ -d /sys/bus/usb/devices/usb1 ]; then
+        tegra_usb_mux_handoff
+        break
+    fi
+    sleep 0.5 2>/dev/null || sleep 1
+done
 PAD_MUX_AFTER=$(mmio_read 0x7009f004)
 echo "    XUSB_PADCTL_USB2_PAD_MUX: ${PAD_MUX_BEFORE:-N/A} -> ${PAD_MUX_AFTER:-N/A}"
 
@@ -118,6 +203,8 @@ PAYLOAD_DIR=""
 echo -n "[*] Scanning for installer media (USB / MicroSD)..."
 
 for attempt in $(seq 1 45); do
+    tegra_usb_mux_handoff
+
     for p in /mnt/usb /media /media/* /run/media/* /; do
         if [ -f "$p/surface2-rootfs-golden.tar.gz" ]; then
             PAYLOAD_DIR="$p"
@@ -141,16 +228,10 @@ for attempt in $(seq 1 45); do
         done
     done
 
-    # Retry controller rebind at attempt 10 and 25 if USB drive hasn't enumerated yet
-    if [ "$attempt" -eq 10 ] || [ "$attempt" -eq 25 ]; then
-        tegra_usb_mux_handoff
-        if [ -e /sys/bus/platform/drivers/tegra-usb/7d000000.usb ]; then
-            echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/unbind 2>/dev/null || true
-            sleep 1
-            tegra_usb_mux_handoff
-            echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/bind 2>/dev/null || true
-            tegra_usb_mux_handoff
-        fi
+    # If USB drive hasn't enumerated by attempt 6 or 18, pulse 5V VBUS (GPIO PK1)
+    # to force any USB 3.0 drive out of UEFI SuperSpeed state without unbinding usb1
+    if [ "$attempt" -eq 6 ] || [ "$attempt" -eq 18 ]; then
+        tegra_usb_vbus_cycle
     fi
 
     echo -n "."
@@ -166,9 +247,14 @@ if [ -z "$PAYLOAD_DIR" ]; then
     echo " USB/PADCTL Hardware Diagnostics:"
     echo "   XUSB_PADCTL_USB2_PAD_MUX (0x7009f004): $(mmio_read 0x7009f004)"
     echo "   XUSB_PADCTL_ELPG_PROGRAM (0x7009f01c): $(mmio_read 0x7009f01c)"
+    echo "   XUSB_PADCTL_OTG_PAD0_CTL0(0x7009f090): $(mmio_read 0x7009f090)"
+    echo "   XUSB_PADCTL_BIAS_PAD_CTL0(0x7009f0a0): $(mmio_read 0x7009f0a0)"
     echo "   USB1 PORTSC1             (0x7d000184): $(mmio_read 0x7d000184)"
+    echo "   USB1 HOSTPC1_DEVLC       (0x7d0001b4): $(mmio_read 0x7d0001b4)"
     echo "   USB1 USB_SUSP_CTRL       (0x7d000400): $(mmio_read 0x7d000400)"
     echo "   USB1 VBUS_SENSORS        (0x7d000404): $(mmio_read 0x7d000404)"
+    echo "   USB1 UTMIP_XCVR_CFG0     (0x7d000808): $(mmio_read 0x7d000808)"
+    echo "   USB1 UTMIP_BIAS_CFG0     (0x7d00080c): $(mmio_read 0x7d00080c)"
     echo ""
     echo " Detected block devices:"
     lsblk 2>/dev/null || cat /proc/partitions
