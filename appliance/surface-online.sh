@@ -94,9 +94,11 @@ while true; do
     CUR_HDMI_STATE=$(cat /sys/class/drm/card0-HDMI-A-1/status 2>/dev/null || echo "unknown")
     if [ "$CUR_HDMI_STATE" != "$LAST_HDMI_STATE" ]; then
         echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null || true
+        if [ "$CUR_HDMI_STATE" = "connected" ]; then
+            /usr/local/bin/surface-hdmi-phy.py 2>/dev/null || true
+        fi
         LAST_HDMI_STATE="$CUR_HDMI_STATE"
     fi
-    /usr/local/bin/surface-hdmi-phy.py 2>/dev/null || true
 
     # 2. Dynamic wireless interface discovery
     IFACE=$(find_wifi_iface)

@@ -263,10 +263,14 @@ class DrmMasterManager:
                     self._log(f"Enabled HDMI-A-1 (cid={hdmi_cid}) on CRTC {hdmi_crtc_id} using fb_id={fb_id}")
                 else:
                     self._log(f"HDMI connected but missing fb_id={fb_id} or mode={bool(mode_bytes)}")
+            elif connected and not self.last_hdmi_connected:
+                apply_hdmi_phy_fix()
+                self._log(f"HDMI replugged on active CRTC {hdmi_crtc_id}; re-applied PHY fix")
             elif not connected and enabled:
                 # Keep CRTC 64 (dc@54200000 / DISA) enabled on Tegra 114: disabling DISA
                 # powergates shared display logic and causes DSI-1 (CRTC 98) to go black.
                 self._log(f"HDMI unplugged; keeping CRTC {hdmi_crtc_id} active so DSI CRTC {dsi_crtc_id} stays on")
+            self.last_hdmi_connected = connected
         except Exception as e:
             self._log(f"sync_hdmi_hotplug error: {e}")
 
@@ -762,7 +766,6 @@ class SmartReceiverServer:
         while True:
             time.sleep(2)
             drm_manager.sync_hdmi_hotplug()
-            apply_hdmi_phy_fix()
             with self.state_lock:
                 is_idle = (self.state == "IDLE")
             if is_idle:
