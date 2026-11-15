@@ -147,7 +147,7 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                     for sub in pmic["children"]:
                         if sub["name"] == "regulators":
                             for reg in sub["children"]:
-                                if reg["name"] == "dcdc3":
+                                if reg["name"] in ("dcdc3", "fet6"):
                                     ensure_prop(reg, "regulator-always-on", b"")
                                     ensure_prop(reg, "regulator-boot-on", b"")
                 elif pmic["name"] == "pmic@58":
@@ -156,7 +156,7 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                             for rnode in sub["children"]:
                                 if rnode["name"] == "regulators":
                                     for reg in rnode["children"]:
-                                        if reg["name"] in ("regen1", "regen2", "ldoln"):
+                                        if reg["name"] in ("regen1", "regen2", "ldoln", "ldo9"):
                                             ensure_prop(reg, "regulator-always-on", b"")
                                             ensure_prop(reg, "regulator-boot-on", b"")
                                     if not any(r["name"] == "ldo4" for r in rnode["children"]):
@@ -216,9 +216,12 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
             ensure_prop(ch, "status", b"okay\x00")
             ensure_prop(ch, "compatible", b"nvidia,tegra114-ehci\x00nvidia,tegra30-ehci\x00")
             ensure_prop(ch, "dr_mode", b"host\x00")
+            ensure_prop(ch, "nvidia,needs-double-reset", b"")
         elif ch["name"] == "usb-phy@7d000000":
             ensure_prop(ch, "status", b"okay\x00")
+            ensure_prop(ch, "dr_mode", b"host\x00")
             ensure_prop(ch, "vbus-supply", struct.pack(">I", 0x18))
+            ensure_prop(ch, "nvidia,xcvr-setup-use-fuses", b"")
         elif ch["name"] == "usb@7d008000":
             ensure_prop(ch, "status", b"disabled\x00")
         elif ch["name"] == "usb-phy@7d008000":

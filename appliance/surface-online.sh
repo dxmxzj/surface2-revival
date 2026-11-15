@@ -13,6 +13,36 @@ flock -n 9 || exit 0
 
 echo "=== Surface 2 Online Service Started: $(date) ==="
 
+# Route external USB Type-A UTMI Pad 0 from XUSB_PADCTL (0x7009f000) to USB1 EHCI (0x7d000000)
+python3 -c '
+import mmap, os, struct
+try:
+    fd = os.open("/dev/mem", os.O_RDWR | os.O_SYNC)
+    car = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=0x60006000)
+    rst_w = struct.unpack("<I", car[0x35c:0x360])[0]
+    car[0x35c:0x360] = struct.pack("<I", rst_w & ~0x4000)
+    car.close()
+    pad = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=0x7009f000)
+    elpg = struct.unpack("<I", pad[0x01c:0x020])[0]
+    pad[0x01c:0x020] = struct.pack("<I", elpg & ~0x07000000)
+    mux = struct.unpack("<I", pad[0x004:0x008])[0]
+    pad[0x004:0x008] = struct.pack("<I", mux & ~0x000c0003)
+    ctl0 = struct.unpack("<I", pad[0x0a0:0x0a4])[0]
+    pad[0x0a0:0x0a4] = struct.pack("<I", ctl0 & ~0x00380000)
+    ctl1 = struct.unpack("<I", pad[0x0ac:0x0b0])[0]
+    pad[0x0ac:0x0b0] = struct.pack("<I", ctl1 & ~0x00000004)
+    bias = struct.unpack("<I", pad[0x0b8:0x0bc])[0]
+    pad[0x0b8:0x0bc] = struct.pack("<I", bias & ~0x00001000)
+    pad.close()
+    os.close(fd)
+except Exception as e:
+    pass
+' 2>/dev/null || true
+
+for d in /sys/bus/platform/devices/7d000000.usb* /sys/bus/platform/devices/ci_hdrc* /sys/bus/usb/devices/usb*; do
+    [ -e "$d/power/control" ] && echo on > "$d/power/control" 2>/dev/null || true
+done
+
 # Load Marvell Avastar 88W8897 SDIO driver
 KVER=$(uname -r)
 insmod /lib/modules/$KVER/kernel/drivers/net/wireless/marvell/mwifiex/mwifiex.ko 2>/dev/null || true

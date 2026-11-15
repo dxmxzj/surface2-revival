@@ -18,6 +18,7 @@ import time
 SRC_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
 OUT_INITRD = '/mnt/d/surface2-usb-files/initrd.gz'
 ONLINE_SH = '/home/dxm/surface2-revival/appliance/surface-online.sh'
+DEVMEM_BIN = '/home/dxm/surface2-revival/boot/devmem2'
 WIFI_CONF = '/mnt/d/surface2-usb-files/wpa_supplicant.conf'
 SSH_KEY = '/mnt/d/surface2-usb-files/authorized_keys'
 
@@ -53,6 +54,65 @@ echo " [*] STANDALONE INSTALLATION. Zero typing / No keyboard required."
 echo " [*] Target: Internal 32 GB eMMC (/dev/mmcblk0)"
 echo ""
 
+# Helper functions for Tegra 114 MMIO register access via /usr/bin/devmem2
+mmio_read() {
+    /usr/bin/devmem2 "$1" w 2>/dev/null | awk '/Value at address/ {print $NF}'
+}
+
+mmio_write() {
+    /usr/bin/devmem2 "$1" w "$2" >/dev/null 2>&1
+}
+
+tegra_usb_mux_handoff() {
+    [ -x /usr/bin/devmem2 ] || return 0
+    # 1. Ensure XUSB_PADCTL (reset 142 = bit 14 of CAR RST_DEVICES_W 0x6000635c) is out of reset
+    RST_W=$(mmio_read 0x6000635c)
+    if [ -n "$RST_W" ]; then
+        mmio_write 0x6000635c $(printf "0x%x" $(( RST_W & ~0x4000 )))
+    fi
+    # 2. Release XUSB_PADCTL_ELPG_PROGRAM (0x7009f01c) AUX_MUX LP0 clamps (bits 24..26)
+    ELPG=$(mmio_read 0x7009f01c)
+    if [ -n "$ELPG" ]; then
+        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x01000000 )))
+        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x03000000 )))
+        mmio_write 0x7009f01c $(printf "0x%x" $(( ELPG & ~0x07000000 )))
+    fi
+    # 3. Route UTMI Pad 0 (bits [1:0]) & UTMI Bias Pad (bits [19:18]) in XUSB_PADCTL_USB2_PAD_MUX (0x7009f004)
+    #    from XUSB (1) to SNPS / usb@7d000000 (0)
+    MUX=$(mmio_read 0x7009f004)
+    if [ -n "$MUX" ]; then
+        mmio_write 0x7009f004 $(printf "0x%x" $(( MUX & ~0x000c0003 )))
+    fi
+    # 4. Clear power-down bits on XUSB_PADCTL_USB2_OTG_PAD0_CTL0/1 & BIAS_PAD_CTL0
+    CTL0=$(mmio_read 0x7009f0a0)
+    [ -n "$CTL0" ] && mmio_write 0x7009f0a0 $(printf "0x%x" $(( CTL0 & ~0x00380000 )))
+    CTL1=$(mmio_read 0x7009f0ac)
+    [ -n "$CTL1" ] && mmio_write 0x7009f0ac $(printf "0x%x" $(( CTL1 & ~0x00000004 )))
+    BIAS=$(mmio_read 0x7009f0b8)
+    [ -n "$BIAS" ] && mmio_write 0x7009f0b8 $(printf "0x%x" $(( BIAS & ~0x00001000 )))
+    # 5. Ensure GPIO PK1 (OUDD 0x6000d2a8 in Surface 2 ACPI SSDT) is enabled and HIGH
+    mmio_write 0x6000d288 0x0202
+    mmio_write 0x6000d298 0x0202
+    mmio_write 0x6000d2a8 0x0202
+    # 6. Keep USB1 controller and PHY out of runtime suspend
+    for d in /sys/bus/platform/devices/7d000000.usb* /sys/bus/platform/devices/ci_hdrc* /sys/bus/usb/devices/usb*; do
+        [ -e "$d/power/control" ] && echo on > "$d/power/control" 2>/dev/null || true
+    done
+}
+
+echo "[*] Handing off external USB port mux (XUSB_PADCTL -> USB1 EHCI)..."
+PAD_MUX_BEFORE=$(mmio_read 0x7009f004)
+tegra_usb_mux_handoff
+if [ -e /sys/bus/platform/drivers/tegra-usb/7d000000.usb ]; then
+    echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/unbind 2>/dev/null || true
+    sleep 1
+    tegra_usb_mux_handoff
+    echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/bind 2>/dev/null || true
+    tegra_usb_mux_handoff
+fi
+PAD_MUX_AFTER=$(mmio_read 0x7009f004)
+echo "    XUSB_PADCTL_USB2_PAD_MUX: ${PAD_MUX_BEFORE:-N/A} -> ${PAD_MUX_AFTER:-N/A}"
+
 # 1. Search for installer media (USB or MicroSD)
 PAYLOAD_DIR=""
 echo -n "[*] Scanning for installer media (USB / MicroSD)..."
@@ -81,6 +141,18 @@ for attempt in $(seq 1 45); do
         done
     done
 
+    # Retry controller rebind at attempt 10 and 25 if USB drive hasn't enumerated yet
+    if [ "$attempt" -eq 10 ] || [ "$attempt" -eq 25 ]; then
+        tegra_usb_mux_handoff
+        if [ -e /sys/bus/platform/drivers/tegra-usb/7d000000.usb ]; then
+            echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/unbind 2>/dev/null || true
+            sleep 1
+            tegra_usb_mux_handoff
+            echo 7d000000.usb > /sys/bus/platform/drivers/tegra-usb/bind 2>/dev/null || true
+            tegra_usb_mux_handoff
+        fi
+    fi
+
     echo -n "."
     sleep 1
 done
@@ -91,7 +163,12 @@ if [ -z "$PAYLOAD_DIR" ]; then
     echo "=========================================================================="
     echo " [ERROR] Installer payload (surface2-rootfs-golden.tar.gz) NOT FOUND!    "
     echo "=========================================================================="
-    echo " Make sure the USB drive or MicroSD card is securely inserted."
+    echo " USB/PADCTL Hardware Diagnostics:"
+    echo "   XUSB_PADCTL_USB2_PAD_MUX (0x7009f004): $(mmio_read 0x7009f004)"
+    echo "   XUSB_PADCTL_ELPG_PROGRAM (0x7009f01c): $(mmio_read 0x7009f01c)"
+    echo "   USB1 PORTSC1             (0x7d000184): $(mmio_read 0x7d000184)"
+    echo "   USB1 USB_SUSP_CTRL       (0x7d000400): $(mmio_read 0x7d000400)"
+    echo "   USB1 VBUS_SENSORS        (0x7d000404): $(mmio_read 0x7d000404)"
     echo ""
     echo " Detected block devices:"
     lsblk 2>/dev/null || cat /proc/partitions
@@ -382,7 +459,8 @@ def build():
 
             # Exclude large payload archives to guarantee lean fast-boot (<50 MB)
             if name in ('surface2-rootfs-golden.tar.gz', 'surface2-boot-golden.tar.gz',
-                        'init', 'surface-online.sh', 'usr/local/bin/surface-online.sh', 'wpa_supplicant.conf'):
+                        'init', 'surface-online.sh', 'usr/local/bin/surface-online.sh',
+                        'usr/bin/devmem2', 'wpa_supplicant.conf', 'authorized_keys'):
                 f_in.read(filesize)
                 pad2 = (4 - (filesize % 4)) % 4
                 f_in.read(pad2)
@@ -406,10 +484,11 @@ def build():
         f_out.write(init_data)
         f_out.write(pad4(len(init_data)))
 
-        # 2. Add extra lightweight scripts
+        # 2. Add extra lightweight scripts & binaries
         extra_files = [
             ('surface-online.sh', ONLINE_SH),
             ('usr/local/bin/surface-online.sh', ONLINE_SH),
+            ('usr/bin/devmem2', DEVMEM_BIN),
             ('wpa_supplicant.conf', WIFI_CONF),
             ('authorized_keys', SSH_KEY),
         ]
@@ -418,7 +497,7 @@ def build():
             if not os.path.exists(src_path):
                 continue
             sz = os.path.getsize(src_path)
-            mode = 0o100755 if dest_name.endswith('.sh') else 0o100600
+            mode = 0o100755 if (dest_name.endswith('.sh') or dest_name.endswith('devmem2')) else 0o100600
             print(f"Embedding {dest_name} ({sz} bytes)...")
             f_out.write(make_header(dest_name, sz, mode=mode))
             with open(src_path, 'rb') as f_src:
