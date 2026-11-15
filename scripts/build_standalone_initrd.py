@@ -193,6 +193,15 @@ fi
 # 3. Disable rc.local to eliminate duplicate service runs and console credential leakage
 rm -f /mnt/target/etc/rc.local
 
+# 3b. Ignore Hall-effect lid switch so closing the Type Cover doesn't suspend/crash Tegra 4
+mkdir -p /mnt/target/etc/systemd/logind.conf.d
+cat << 'LID_EOF' > /mnt/target/etc/systemd/logind.conf.d/ignore-lid.conf
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+LID_EOF
+
 # 4. Install updated autonomous online daemon & smart receiver
 if [ -f "/surface-online.sh" ]; then
     cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
