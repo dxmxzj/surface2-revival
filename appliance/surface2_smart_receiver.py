@@ -19,6 +19,7 @@ import glob
 import mmap
 import time
 import json
+import ctypes
 import fcntl
 import struct
 import socket
@@ -37,6 +38,10 @@ AIRPLAY_PORT = 7000
 # DRM ioctl constants (32-bit ARM Linux)
 DRM_IOCTL_SET_MASTER = 0x0000641E
 DRM_IOCTL_DROP_MASTER = 0x0000641F
+DRM_IOCTL_MODE_GETRESOURCES = 0xC04064A0
+DRM_IOCTL_MODE_GETCRTC = 0xC06864A1
+DRM_IOCTL_MODE_SETCRTC = 0xC06864A2
+DRM_IOCTL_MODE_GETCONNECTOR = 0xC05064A7
 DRM_IOCTL_MODE_CREATE_DUMB = 0xC02064B2
 DRM_IOCTL_MODE_MAP_DUMB = 0xC01064B3
 DRM_IOCTL_MODE_DESTROY_DUMB = 0xC00464B4
@@ -44,11 +49,143 @@ DRM_IOCTL_MODE_ADDFB2 = 0xC06464B8
 DRM_IOCTL_MODE_RMFB = 0xC00464AF
 DRM_IOCTL_MODE_SETPLANE = 0xC03064B7
 DRM_FORMAT_YUV420 = 0x32315559  # 'YU12' planar 4:2:0
+DRM_MODE_CONNECTOR_HDMIA = 11
 
 # Tegra 4 Hardware Overlay Planes:
 # Plane 42 -> CRTC 64 (DC0 / HDMI-A-1)
 # Plane 76 -> CRTC 98 (DC1 / Internal 1080p Panel DSI-1)
 DUAL_OVERLAY_TARGETS = [(42, 64), (76, 98)]
+
+
+class DrmMasterManager:
+    """
+    Holds DRM Master on /dev/dri/card0 so kernel drm_fb_helper_hotplug_event()
+    never tears down or modesets CRTC 98 (internal 1080p DSI panel) on HDMI plug/unplug.
+    Handles HDMI-A-1 (CRTC 64) hotplugging independently without touching DSI-1.
+    """
+    def __init__(self):
+        self.fd = None
+        self.lock = threading.Lock()
+        self.last_hdmi_connected = None
+
+    def acquire(self):
+        with self.lock:
+            if self.fd is None:
+                try:
+                    self.fd = os.open("/dev/dri/card0", os.O_RDWR | os.O_CLOEXEC)
+                    fcntl.ioctl(self.fd, DRM_IOCTL_SET_MASTER, 0)
+                except Exception as e:
+                    print(f"[DrmMasterManager] acquire failed: {e}", flush=True)
+                    if self.fd is not None:
+                        try:
+                            os.close(self.fd)
+                        except Exception:
+                            pass
+                        self.fd = None
+            return self.fd
+
+    def release(self):
+        with self.lock:
+            if self.fd is not None:
+                try:
+                    fcntl.ioctl(self.fd, DRM_IOCTL_DROP_MASTER, 0)
+                except Exception:
+                    pass
+                try:
+                    os.close(self.fd)
+                except Exception:
+                    pass
+                self.fd = None
+
+    def _get_crtc(self, fd, crtc_id):
+        buf = bytearray(0x68)
+        struct.pack_into("<I", buf, 12, crtc_id)
+        fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCRTC, buf)
+        fb_id, x, y, gamma_size, mode_valid = struct.unpack_from("<IIIII", buf, 16)
+        mode_bytes = bytes(buf[36:104])
+        return fb_id, mode_valid, mode_bytes
+
+    def _find_hdmi_connector(self, fd):
+        res = bytearray(0x40)
+        fcntl.ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res)
+        count_fbs, count_crtcs, count_conns, count_encs = struct.unpack_from("<IIII", res, 32)
+        if count_conns <= 0:
+            return None, None
+        fb_buf = (ctypes.c_uint32 * max(1, count_fbs))()
+        crtc_buf = (ctypes.c_uint32 * max(1, count_crtcs))()
+        conn_buf = (ctypes.c_uint32 * max(1, count_conns))()
+        enc_buf = (ctypes.c_uint32 * max(1, count_encs))()
+        res = bytearray(0x40)
+        struct.pack_into(
+            "<QQQQIIII", res, 0,
+            ctypes.addressof(fb_buf), ctypes.addressof(crtc_buf),
+            ctypes.addressof(conn_buf), ctypes.addressof(enc_buf),
+            count_fbs, count_crtcs, count_conns, count_encs
+        )
+        fcntl.ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res)
+        for cid in conn_buf:
+            c = bytearray(0x50)
+            struct.pack_into("<I", c, 48, cid)
+            fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c)
+            count_modes, count_props, count_enc = struct.unpack_from("<III", c, 32)
+            conn_type = struct.unpack_from("<I", c, 52)[0]
+            connection = struct.unpack_from("<I", c, 60)[0]
+            if conn_type != DRM_MODE_CONNECTOR_HDMIA:
+                continue
+            if connection != 1 or count_modes <= 0:
+                return cid, None
+            modes_buf = ctypes.create_string_buffer(68 * count_modes)
+            props_buf = (ctypes.c_uint32 * max(1, count_props))()
+            pvals_buf = (ctypes.c_uint64 * max(1, count_props))()
+            encs_buf = (ctypes.c_uint32 * max(1, count_enc))()
+            c = bytearray(0x50)
+            struct.pack_into(
+                "<QQQQIIII", c, 0,
+                ctypes.addressof(encs_buf), ctypes.addressof(modes_buf),
+                ctypes.addressof(props_buf), ctypes.addressof(pvals_buf),
+                count_modes, count_props, count_enc, 0
+            )
+            struct.pack_into("<I", c, 48, cid)
+            fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c)
+            chosen_mode = modes_buf.raw[:68]
+            for i in range(count_modes):
+                m = modes_buf.raw[i * 68 : (i + 1) * 68]
+                hdisp, vdisp = struct.unpack_from("<H8xH", m, 4)
+                if hdisp == 1920 and vdisp == 1080:
+                    chosen_mode = m
+                    break
+            return cid, chosen_mode
+        return None, None
+
+    def sync_hdmi_hotplug(self):
+        fd = self.acquire()
+        if fd is None:
+            return
+        try:
+            st_path = "/sys/class/drm/card0-HDMI-A-1/status"
+            en_path = "/sys/class/drm/card0-HDMI-A-1/enabled"
+            connected = os.path.exists(st_path) and open(st_path).read().strip() == "connected"
+            enabled = os.path.exists(en_path) and open(en_path).read().strip() == "enabled"
+
+            if connected and not enabled:
+                fb_id, _, _ = self._get_crtc(fd, 98)
+                hdmi_cid, mode_bytes = self._find_hdmi_connector(fd)
+                if fb_id and hdmi_cid and mode_bytes:
+                    conn_arr = (ctypes.c_uint32 * 1)(hdmi_cid)
+                    sc = bytearray(0x68)
+                    struct.pack_into("<QIIIIIIIII", sc, 0, ctypes.addressof(conn_arr), 1, 64, fb_id, 0, 0, 0, 1, 0, 0)
+                    sc[36:104] = mode_bytes
+                    fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
+                    apply_hdmi_phy_fix()
+            elif not connected and enabled:
+                sc = bytearray(0x68)
+                struct.pack_into("<QIIIIIIIII", sc, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0)
+                fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
+        except Exception as e:
+            print(f"[DrmMasterManager] sync_hdmi_hotplug error: {e}", flush=True)
+
+
+drm_manager = DrmMasterManager()
 
 
 def apply_hdmi_phy_fix():
@@ -210,6 +347,7 @@ def drop_to_terminal(reason="User requested terminal"):
     except Exception:
         pass
     receiver.stop_stream_Pipeline()
+    drm_manager.release()
     restore_tty1_terminal(reason, start_kbd=True)
     os._exit(0)
 
@@ -355,13 +493,17 @@ class DualOverlayStreamPlayer:
 
     def _run_loop(self, url: str, on_eof_callback):
         drm_fd = None
+        owns_drm_fd = False
         buffers = []
         try:
-            drm_fd = os.open("/dev/dri/card0", os.O_RDWR)
-            try:
-                fcntl.ioctl(drm_fd, DRM_IOCTL_SET_MASTER, 0)
-            except Exception:
-                pass
+            drm_fd = drm_manager.acquire()
+            if drm_fd is None:
+                drm_fd = os.open("/dev/dri/card0", os.O_RDWR)
+                owns_drm_fd = True
+                try:
+                    fcntl.ioctl(drm_fd, DRM_IOCTL_SET_MASTER, 0)
+                except Exception:
+                    pass
 
             # Allocate YU12 DRM framebuffer and bind ONCE to both hardware overlay planes:
             # Plane 42 (CRTC 64 HDMI) and Plane 76 (CRTC 98 Internal 1080p LCD).
@@ -486,14 +628,15 @@ class DualOverlayStreamPlayer:
                         fcntl.ioctl(drm_fd, DRM_IOCTL_MODE_DESTROY_DUMB, struct.pack("<I", b["handle"]))
                     except Exception:
                         pass
-                try:
-                    fcntl.ioctl(drm_fd, DRM_IOCTL_DROP_MASTER, 0)
-                except Exception:
-                    pass
-                try:
-                    os.close(drm_fd)
-                except Exception:
-                    pass
+                if owns_drm_fd:
+                    try:
+                        fcntl.ioctl(drm_fd, DRM_IOCTL_DROP_MASTER, 0)
+                    except Exception:
+                        pass
+                    try:
+                        os.close(drm_fd)
+                    except Exception:
+                        pass
 
             if not self.stop_event.is_set() and on_eof_callback:
                 on_eof_callback("Stream ended")
@@ -531,7 +674,8 @@ class SmartReceiverServer:
 
     def dashboard_ticker(self):
         while True:
-            time.sleep(5)
+            time.sleep(2)
+            drm_manager.sync_hdmi_hotplug()
             apply_hdmi_phy_fix()
             with self.state_lock:
                 is_idle = (self.state == "IDLE")
@@ -769,6 +913,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 def handle_sigterm(signum, frame):
     receiver.stop_stream_Pipeline()
+    drm_manager.release()
     os._exit(0)
 
 
@@ -777,6 +922,8 @@ def main():
     signal.signal(signal.SIGINT, handle_sigterm)
 
     print("[SmartReceiver] Initializing Surface 2 Dual-Display Dashboard...", flush=True)
+    drm_manager.acquire()
+    drm_manager.sync_hdmi_hotplug()
     receiver.show_dashboard("Ready to receive streams")
 
     threading.Thread(target=receiver.dashboard_ticker, daemon=True).start()
