@@ -207,9 +207,23 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
                     ensure_prop(sub, "status", b"okay\x00")
                     ensure_prop(sub, "nvidia,ddc-i2c-bus", struct.pack(">I", 0x04))
                     ensure_prop(sub, "nvidia,hpd-gpio", struct.pack(">III", 0x05, 0x6F, 0x00))
-                    ensure_prop(sub, "pll-supply", struct.pack(">I", 0x07))
-                    ensure_prop(sub, "vdd-supply", struct.pack(">I", 0x10))
-                    ensure_prop(sub, "hdmi-supply", struct.pack(">I", 0x18))
+                    # Crucial: remove hdmi-supply so HDMI power management never disables regulator-usb3 (0x18)
+                    sub["props"] = [p for p in sub["props"] if p[0] != "hdmi-supply"]
+
+    # 5. External USB 2.0 host port (usb@7d000000) and disable unused controller 3 (usb@7d008000)
+    for ch in root["children"]:
+        if ch["name"] == "usb@7d000000":
+            ensure_prop(ch, "status", b"okay\x00")
+            ensure_prop(ch, "compatible", b"nvidia,tegra114-ehci\x00nvidia,tegra30-ehci\x00")
+            ensure_prop(ch, "dr_mode", b"host\x00")
+        elif ch["name"] == "usb-phy@7d000000":
+            ensure_prop(ch, "status", b"okay\x00")
+            ensure_prop(ch, "vbus-supply", struct.pack(">I", 0x18))
+        elif ch["name"] == "usb@7d008000":
+            ensure_prop(ch, "status", b"disabled\x00")
+        elif ch["name"] == "usb-phy@7d008000":
+            ensure_prop(ch, "status", b"disabled\x00")
+            ch["props"] = [p for p in ch["props"] if p[0] != "vbus-supply"]
 
     out = serialize_fdt_tree(root, mem_rsv, ver, lver, cpuid)
     open(out_dtb_path, "wb").write(out)
@@ -217,10 +231,16 @@ def build_golden_dtb(base_dtb_path: str, out_dtb_path: str):
 
 
 if __name__ == "__main__":
-    base = sys.argv[1] if len(sys.argv) > 1 else "/tmp/dtb-21906.dtb"
-    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "boot",
-        "tegra114-microsoft-surface-2.dtb",
-    )
+    repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_base = os.path.join(repo_dir, "boot", "tegra114-microsoft-surface-2.dtb")
+    if len(sys.argv) > 1:
+        base = sys.argv[1]
+    elif os.path.exists("/tmp/dtb-21906.dtb"):
+        base = "/tmp/dtb-21906.dtb"
+    elif os.path.exists(default_base):
+        base = default_base
+    else:
+        base = "/mnt/d/surface2-usb-files/tegra114-microsoft-surface-2.dtb"
+
+    out = sys.argv[2] if len(sys.argv) > 2 else default_base
     build_golden_dtb(base, out)
