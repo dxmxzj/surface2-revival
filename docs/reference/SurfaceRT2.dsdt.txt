@@ -1,0 +1,4102 @@
+/*
+ * Intel ACPI Component Architecture
+ * AML/ASL+ Disassembler version 20190215 (32-bit version)
+ * Copyright (c) 2000 - 2019 Intel Corporation
+ * 
+ * Disassembling to symbolic ASL+ operators
+ *
+ * Disassembly of DSDT.raw, Sat Mar 02 23:59:24 2019
+ *
+ * Original Table Header:
+ *     Signature        "DSDT"
+ *     Length           0x00003C6D (15469)
+ *     Revision         0x02
+ *     Checksum         0xA4
+ *     OEM ID           "NVIDIA"
+ *     OEM Table ID     "T114EDK2"
+ *     OEM Revision     0x00000003 (3)
+ *     Compiler ID      "MSFT"
+ *     Compiler Version 0x04000000 (67108864)
+ */
+DefinitionBlock ("", "DSDT", 2, "NVIDIA", "T114EDK2", 0x00000003)
+{
+    /*
+     * iASL Warning: There were 3 external control methods found during
+     * disassembly, but only 0 were resolved (3 unresolved). Additional
+     * ACPI tables may be required to properly disassemble the code. This
+     * resulting disassembler output file may not compile because the
+     * disassembler did not know how many arguments to assign to the
+     * unresolved methods. Note: SSDTs can be dynamically loaded at
+     * runtime and may or may not be available via the host OS.
+     *
+     * To specify the tables needed to resolve external control method
+     * references, the -e option can be used to specify the filenames.
+     * Example iASL invocations:
+     *     iasl -e ssdt1.aml ssdt2.aml ssdt3.aml -d dsdt.aml
+     *     iasl -e dsdt.aml ssdt2.aml -d ssdt1.aml
+     *     iasl -e ssdt*.aml -d dsdt.aml
+     *
+     * In addition, the -fe option can be used to specify a file containing
+     * control method external declarations with the associated method
+     * argument counts. Each line of the file must be of the form:
+     *     External (<method pathname>, MethodObj, <argument count>)
+     * Invocation:
+     *     iasl -fe refs.txt -d dsdt.aml
+     *
+     * The following methods were unresolved and many not compile properly
+     * because the disassembler had to guess at the number of arguments
+     * required for each:
+     */
+    External (_SB_.AUDI.ADP_, UnknownObj)
+    External (_SB_.AUDI.CRSA, IntObj)
+    External (_SB_.AUDI.DSM_, MethodObj)    // Warning: Unknown method, guessing 4 arguments
+    External (_SB_.GFXC._DOD, UnknownObj)
+    External (_SB_.GFXC.BKLP, IntObj)
+    External (_SB_.GFXC.CRSA, UnknownObj)
+    External (_SB_.GFXC.DCBB, IntObj)
+    External (_SB_.GFXC.DODF, IntObj)
+    External (_SB_.GFXC.DRBB, IntObj)
+    External (_SB_.GFXC.DSIB, IntObj)
+    External (_SB_.GFXC.LIDB, IntObj)
+    External (_SB_.GFXC.MDTL, UnknownObj)
+    External (_SB_.GFXC.TCBB, IntObj)
+    External (_SB_.GFXC.TGF0, IntObj)
+    External (_SB_.GFXC.TPBB, IntObj)
+    External (_SB_.GFXC.TTCB, IntObj)
+    External (_SB_.GPIO.GPK_, IntObj)
+    External (_SB_.NVSE.JSIS, IntObj)
+    External (_SB_.PEPD.CMAX, IntObj)
+    External (_SB_.PEPD.CORE, IntObj)
+    External (_SB_.PEPD.CPGT, IntObj)
+    External (_SB_.PEPD.CPVL, IntObj)
+    External (_SB_.PEPD.DVFS, IntObj)
+    External (_SB_.PEPD.GPGT, IntObj)
+    External (_SB_.PEPD.GTZT, IntObj)
+    External (_SB_.PEPD.I2CF, IntObj)
+    External (_SB_.PEPD.INFO, IntObj)
+    External (_SB_.PEPD.THRM, IntObj)
+    External (_SB_.PEPD.TZBI, IntObj)
+    External (_SB_.PMSD.CRSA, IntObj)
+    External (_SB_.PMUD, UnknownObj)
+    External (_SB_.SDM1.CRSA, UnknownObj)
+    External (_SB_.SDM2.CRSA, UnknownObj)
+    External (_SB_.SDM3.CRSA, UnknownObj)
+    External (_SB_.SDM4.CRSA, UnknownObj)
+    External (_SB_.THEM.CRSA, UnknownObj)
+    External (_SB_.THEM.GPDD, IntObj)
+    External (_SB_.THEM.GTZD, IntObj)
+    External (_SB_.UAR1.UDP_, IntObj)
+    External (_SB_.UAR2.UDP_, IntObj)
+    External (_SB_.UAR3.UDP_, IntObj)
+    External (_SB_.UAR4.UDP_, IntObj)
+    External (_SB_.UAR5.UDP_, IntObj)
+    External (_SB_.USB2.BBR_, MethodObj)    // Warning: Unknown method, guessing 0 arguments
+    External (_SB_.USB3.BBR_, MethodObj)    // Warning: Unknown method, guessing 0 arguments
+    External (SGIO, IntObj)
+
+    Scope (\_SB)
+    {
+        Name (CHID, Zero)
+        Name (TOOS, Zero)
+        Method (_INI, 0, NotSerialized)  // _INI: Initialize
+        {
+            ^CHID = RDR (0x70000000, 0x0804)
+            If (CondRefOf (\_OSI))
+            {
+                If (\_OSI ("Windows 2013"))
+                {
+                    ^TOOS = One
+                }
+            }
+        }
+
+        Method (RDR, 2, Serialized)
+        {
+            OperationRegion (GENO, SystemMemory, (Arg0 + Arg1), 0x04)
+            Field (GENO, DWordAcc, NoLock, Preserve)
+            {
+                RD32,   32
+            }
+
+            Return (RD32) /* \_SB_.RDR_.RD32 */
+        }
+
+        Method (RDF, 4, Serialized)
+        {
+            Return (((RDR (Arg0, Arg1) & (Arg2 << Arg3)) >> Arg3
+                ))
+        }
+
+        Method (WRR, 3, Serialized)
+        {
+            OperationRegion (GEN1, SystemMemory, (Arg0 + Arg1), 0x04)
+            Field (GEN1, DWordAcc, NoLock, Preserve)
+            {
+                WR32,   32
+            }
+
+            WR32 = Arg2
+        }
+
+        Method (WRF, 5, Serialized)
+        {
+            WRR (Arg0, Arg1, ((RDR (Arg0, Arg1) & ~(Arg2 << Arg3
+                )) | (Arg4 << Arg3)))
+        }
+
+        OperationRegion (NVFM, SystemMemory, 0x82000000, 0xA4)
+        Field (NVFM, DWordAcc, NoLock, Preserve)
+        {
+            Offset (0x08), 
+            ODAB,   32, 
+            Offset (0x10), 
+            ODAL,   32, 
+            Offset (0x18), 
+            FMGB,   32, 
+            Offset (0x20), 
+            FMGL,   32, 
+            Offset (0x28), 
+            BPAB,   32, 
+            Offset (0x30), 
+            BPAL,   32, 
+            Offset (0x38), 
+            PPIP,   32, 
+            PPIL,   32, 
+            PPIR,   32, 
+            PPIF,   32, 
+            RTCV,   1, 
+            Offset (0x50), 
+            PEDA,   32, 
+            Offset (0x58), 
+            PEDL,   32, 
+            Offset (0x60), 
+            PCMA,   32, 
+            Offset (0x68), 
+            PCML,   32, 
+            Offset (0x70), 
+            Offset (0xA0), 
+            PNOF,   32
+        }
+
+        Method (GETP, 0, NotSerialized)
+        {
+            Return (ODAB) /* \_SB_.ODAB */
+        }
+
+        Method (GETL, 0, NotSerialized)
+        {
+            Return (ODAL) /* \_SB_.ODAL */
+        }
+
+        Method (BPGB, 0, NotSerialized)
+        {
+            Return (BPAB) /* \_SB_.BPAB */
+        }
+
+        Method (BPGL, 0, NotSerialized)
+        {
+            Return (BPAL) /* \_SB_.BPAL */
+        }
+
+        Method (GEDA, 0, NotSerialized)
+        {
+            Return (PEDA) /* \_SB_.PEDA */
+        }
+
+        Method (GEDL, 0, NotSerialized)
+        {
+            Return (PEDL) /* \_SB_.PEDL */
+        }
+
+        Method (GCMA, 0, NotSerialized)
+        {
+            Return (PCMA) /* \_SB_.PCMA */
+        }
+
+        Method (GCML, 0, NotSerialized)
+        {
+            Return (PCML) /* \_SB_.PCML */
+        }
+
+        OperationRegion (BPMM, SystemMemory, BPGB (), BPGL ())
+        Field (BPMM, DWordAcc, NoLock, Preserve)
+        {
+            BPVR,   32, 
+            BPCU,   32, 
+            BPBT,   32
+        }
+
+        OperationRegion (CLKR, SystemMemory, 0x60006000, 0x1000)
+        Field (CLKR, ByteAcc, NoLock, Preserve)
+        {
+            Offset (0x04), 
+                ,   6, 
+            UAAE,   1, 
+            UABE,   1, 
+            GPIE,   1, 
+            SD2E,   1, 
+                ,   1, 
+            I2SE,   1, 
+            I21E,   1, 
+                ,   1, 
+            SD1E,   1, 
+            SD4E,   1, 
+                ,   6, 
+            US1E,   1, 
+                ,   3, 
+            Offset (0x08), 
+                ,   9, 
+            SP1E,   1, 
+                ,   2, 
+            SP2E,   1, 
+                ,   1, 
+            SP3E,   1, 
+            I24E,   1, 
+                ,   6, 
+            I22E,   1, 
+            UACE,   1, 
+                ,   2, 
+            US2E,   1, 
+            US3E,   1, 
+            Offset (0x0C), 
+                ,   1, 
+            UADE,   1, 
+            UAEE,   1, 
+            I23E,   1, 
+            SP4E,   1, 
+            SD3E,   1, 
+                ,   19, 
+            XUSE,   1, 
+            Offset (0x14), 
+                ,   4, 
+            KBCE,   1, 
+            Offset (0x358), 
+            Offset (0x359), 
+            SP5E,   1, 
+            SP6E,   1, 
+                ,   19, 
+            HDAE,   1
+        }
+
+        Device (CPU0)
+        {
+            Name (_HID, "ACPI0007" /* Processor Device */)  // _HID: Hardware ID
+            Name (_UID, Zero)  // _UID: Unique ID
+        }
+
+        Device (CPU1)
+        {
+            Name (_HID, "ACPI0007" /* Processor Device */)  // _HID: Hardware ID
+            Name (_UID, One)  // _UID: Unique ID
+        }
+
+        Device (CPU2)
+        {
+            Name (_HID, "ACPI0007" /* Processor Device */)  // _HID: Hardware ID
+            Name (_UID, 0x02)  // _UID: Unique ID
+        }
+
+        Device (CPU3)
+        {
+            Name (_HID, "ACPI0007" /* Processor Device */)  // _HID: Hardware ID
+            Name (_UID, 0x03)  // _UID: Unique ID
+        }
+
+        Method (GCRS, 3, NotSerialized)
+        {
+            Name (RSRC, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite,
+                    0x00000000,         // Address Base
+                    0x00000000,         // Address Length
+                    _Y00)
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, _Y01)
+                {
+                    0x00000000,
+                }
+            })
+            CreateDWordField (RSRC, \_SB.GCRS._Y00._BAS, MBAS)  // _BAS: Base Address
+            CreateDWordField (RSRC, \_SB.GCRS._Y00._LEN, MBLE)  // _LEN: Length
+            CreateWordField (RSRC, \_SB.GCRS._Y01._INT, INTN)  // _INT: Interrupts
+            MBAS = Arg0
+            MBLE = Arg1
+            INTN = Arg2
+            Return (RSRC) /* \_SB_.GCRS.RSRC */
+        }
+
+        Method (UCRS, 4, NotSerialized)
+        {
+            Name (RSRC, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite,
+                    0x00000000,         // Address Base
+                    0x00000000,         // Address Length
+                    _Y02)
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Shared, ,, _Y03)
+                {
+                    0x00000000,
+                }
+            })
+            CreateDWordField (RSRC, \_SB.UCRS._Y02._BAS, MBAS)  // _BAS: Base Address
+            CreateDWordField (RSRC, \_SB.UCRS._Y02._LEN, MBLE)  // _LEN: Length
+            CreateWordField (RSRC, \_SB.UCRS._Y03._INT, INTN)  // _INT: Interrupts
+            CreateField (RSRC, \_SB.UCRS._Y03._SHR, 0x02, SHRN)  // _SHR: Shareable
+            MBAS = Arg0
+            MBLE = Arg1
+            INTN = Arg2
+            SHRN = Arg3
+            Return (RSRC) /* \_SB_.UCRS.RSRC */
+        }
+
+        Method (CRSG, 3, NotSerialized)
+        {
+            Name (RSRC, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite,
+                    0x00000000,         // Address Base
+                    0x00000000,         // Address Length
+                    _Y04)
+                Memory32Fixed (ReadWrite,
+                    0x00000000,         // Address Base
+                    0x00000000,         // Address Length
+                    _Y05)
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, _Y06)
+                {
+                    0x00000000,
+                }
+            })
+            CreateDWordField (RSRC, \_SB.CRSG._Y04._BAS, ABAS)  // _BAS: Base Address
+            CreateDWordField (RSRC, \_SB.CRSG._Y04._LEN, ABLE)  // _LEN: Length
+            CreateDWordField (RSRC, \_SB.CRSG._Y05._BAS, BBAS)  // _BAS: Base Address
+            CreateDWordField (RSRC, \_SB.CRSG._Y05._LEN, BBLE)  // _LEN: Length
+            CreateWordField (RSRC, \_SB.CRSG._Y06._INT, INTN)  // _INT: Interrupts
+            ABAS = Arg0
+            ABLE = Arg1
+            BBAS = (Arg0 + 0x80)
+            BBLE = 0x80
+            INTN = Arg2
+            Return (RSRC) /* \_SB_.CRSG.RSRC */
+        }
+
+        Method (CRSD, 2, NotSerialized)
+        {
+            Name (RSRC, ResourceTemplate ()
+            {
+                FixedDMA (0x0000, 0x0000, Width32bit, _Y07)
+                FixedDMA (0x0001, 0x0001, Width32bit, _Y08)
+            })
+            CreateWordField (RSRC, One, REQ1)
+            CreateWordField (RSRC, \_SB.CRSD._Y07._TYP, CHN1)  // _TYP: Type
+            CreateWordField (RSRC, \_SB.CRSD._Y08._DMA, REQ2)  // _DMA: Direct Memory Access
+            CreateWordField (RSRC, \_SB.CRSD._Y08._TYP, CHN2)  // _TYP: Type
+            REQ1 = Arg0
+            REQ2 = (Arg0 | 0x20)
+            CHN1 = Arg1
+            CHN2 = Arg1++
+            Return (RSRC) /* \_SB_.CRSD.RSRC */
+        }
+
+        Method (CRS3, 5, NotSerialized)
+        {
+            Local0 = GCRS (Arg0, Arg1, Arg2)
+            Local1 = CRSD (Arg3, Arg4)
+            Return (ConcatenateResTemplate (Local0, Local1))
+        }
+
+        Device (DMAC)
+        {
+            Name (_HID, "NVDA0009")  // _HID: Hardware ID
+        }
+
+        Device (TIME)
+        {
+            Name (_HID, "NVDA000A")  // _HID: Hardware ID
+        }
+
+        Device (PEPD)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0220")
+            }
+
+            Method (_CID, 0, NotSerialized)  // _CID: Compatible ID
+            {
+                Return ("PNP0D80")
+            }
+
+            Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+            {
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                {
+                    0x0000004D,
+                }
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                {
+                    0x00000053,
+                }
+            })
+            Method (GEMS, 1, NotSerialized)
+            {
+                CreateByteField (Arg0, Zero, VERS)
+                Name (SIZ1, Zero)
+                Name (SIZ2, Zero)
+                Name (SIZ3, Zero)
+                If ((VERS >= 0x50))
+                {
+                    CreateDWordField (Arg0, 0x15, R5S1)
+                    SIZ1 = R5S1 /* \_SB_.PEPD.GEMS.R5S1 */
+                    SIZ2 = Zero
+                    CreateDWordField (Arg0, 0x19, R5S3)
+                    SIZ3 = R5S3 /* \_SB_.PEPD.GEMS.R5S3 */
+                }
+                ElseIf ((VERS >= 0x40))
+                {
+                    CreateDWordField (Arg0, 0x15, R4S1)
+                    SIZ1 = R4S1 /* \_SB_.PEPD.GEMS.R4S1 */
+                    CreateDWordField (Arg0, 0x19, R4S2)
+                    SIZ2 = R4S2 /* \_SB_.PEPD.GEMS.R4S2 */
+                    CreateDWordField (Arg0, 0x1D, R4S3)
+                    SIZ3 = R4S3 /* \_SB_.PEPD.GEMS.R4S3 */
+                }
+
+                If ((VERS >= 0x40))
+                {
+                    Local0 = (SIZ2 * 0x02)
+                    Local0 *= 0x04
+                    Local1 = (SIZ1 * 0x04)
+                    Local0 += Local1
+                    Local1 = (SIZ3 * 0x04)
+                    Local0 += Local1
+                    If ((VERS == 0x40))
+                    {
+                        Local0 += 0x3D
+                    }
+                    ElseIf ((VERS < 0x50))
+                    {
+                        Local0 += 0x41
+                    }
+                    ElseIf ((VERS >= 0x50))
+                    {
+                        Local0 += 0x39
+                    }
+                }
+                Else
+                {
+                    Local0 = 0x01CD
+                }
+
+                Debug = Local0
+                Return (Local0)
+            }
+
+            Method (EMCF, 2, NotSerialized)
+            {
+                Name (BUFA, Buffer (0x04)
+                {
+                     0x00                                             // .
+                })
+                CreateDWordField (BUFA, Zero, FREA)
+                Local0 = (Arg1 + One)
+                CreateDWordField (Arg0, Local0, FREQ)
+                FREA = FREQ /* \_SB_.PEPD.EMCF.FREQ */
+                Return (BUFA) /* \_SB_.PEPD.EMCF.BUFA */
+            }
+
+            Method (PLID, 2, NotSerialized)
+            {
+                CreateByteField (Arg0, Arg1, VERS)
+                If ((VERS >= 0x40))
+                {
+                    Local0 = (Arg1 + 0x0E)
+                    CreateByteField (Arg0, Local0, CLID)
+                    Return (ToInteger (CLID))
+                }
+                Else
+                {
+                    Return (Zero)
+                }
+            }
+
+            Method (GFDS, 0, NotSerialized)
+            {
+                Local3 = Buffer (One)
+                    {
+                         0x00                                             // .
+                    }
+                Local0 = ^DVFS /* External reference */
+                Local1 = SizeOf (Local0)
+                Local6 = GEMS (Local0)
+                Local1 /= Local6
+                Local2 = Zero
+                While (Local1)
+                {
+                    Local4 = EMCF (Local0, Local2)
+                    Local7 = PLID (Local0, Local2)
+                    If (!FROK (Local4, Local7))
+                    {
+                        If ((SizeOf (Local3) < 0x04))
+                        {
+                            Local3 = Local4
+                        }
+                        Else
+                        {
+                            Concatenate (Local3, Local4, Local5)
+                            Local3 = Local5
+                        }
+                    }
+
+                    Local2 += Local6
+                    Local1--
+                }
+
+                Debug = "*** Supported freq:"
+                Debug = Local3
+                Return (Local3)
+            }
+
+            Method (FROK, 2, NotSerialized)
+            {
+                ToInteger (Arg0, Local3)
+                If ((Local3 < 0x639C))
+                {
+                    Return (One)
+                }
+
+                Local0 = \_SB.PLLM ()
+                Local2 = \_SB.PLLP ()
+                Local4 = One
+                While (One)
+                {
+                    Name (_T_0, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                    _T_0 = Arg1
+                    If ((_T_0 == Zero))
+                    {
+                        Local1 = (Local2 / 0x02)
+                        If ((Local3 <= Local1))
+                        {
+                            Divide (Local2, Local3, Local4, Local5)
+                        }
+                        ElseIf ((Local0 >= Local3))
+                        {
+                            Divide (Local0, Local3, Local4, Local5)
+                        }
+                        Else
+                        {
+                            Divide (Local3, Local0, Local4, Local5)
+                        }
+                    }
+                    Else
+                    {
+                        Local4 = Zero
+                    }
+
+                    Break
+                }
+
+                Return (Local4)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("e442d99f-77e6-4ebf-af72-e3d11c0d3d7d")))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == One))
+                        {
+                            Local0 = One
+                            If (CondRefOf (^DVFS))
+                            {
+                                Local0 |= (One << One)
+                                Local0 |= (One << 0x02)
+                            }
+
+                            If (CondRefOf (^THRM))
+                            {
+                                Local0 |= (One << 0x03)
+                            }
+
+                            If (CondRefOf (^INFO))
+                            {
+                                Local0 |= (One << 0x04)
+                            }
+
+                            If (CondRefOf (^TZBI))
+                            {
+                                Local0 |= (One << 0x06)
+                            }
+
+                            If (CondRefOf (^GTZT))
+                            {
+                                Local0 |= (One << 0x08)
+                            }
+
+                            If (CondRefOf (^CPGT))
+                            {
+                                Local0 |= (One << 0x09)
+                            }
+
+                            Local0 |= (One << 0x05)
+                            If ((GCMA () != Zero))
+                            {
+                                Local0 |= (One << 0x07)
+                            }
+
+                            If (CondRefOf (^GPGT))
+                            {
+                                Local0 |= (One << 0x0A)
+                            }
+
+                            Return (Local0)
+                        }
+                    }
+
+                    If ((Arg2 == One))
+                    {
+                        Return (^GFDS ())
+                    }
+
+                    If ((Arg2 == 0x02))
+                    {
+                        Return (^DVFS) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x03))
+                    {
+                        Return (^THRM) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x04))
+                    {
+                        Return (^INFO) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x05))
+                    {
+                        While (One)
+                        {
+                            Name (_T_0, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                            _T_0 = Arg3
+                            If ((_T_0 == Zero))
+                            {
+                                If (CondRefOf (^CMAX))
+                                {
+                                    Return (^CMAX) /* External reference */
+                                }
+                                Else
+                                {
+                                    Return (0x2328)
+                                }
+                            }
+                            ElseIf ((_T_0 == One))
+                            {
+                                If (CondRefOf (^CORE))
+                                {
+                                    Return (^CORE) /* External reference */
+                                }
+                                Else
+                                {
+                                    Return (0x0FA0)
+                                }
+                            }
+                            ElseIf ((_T_0 == 0x02))
+                            {
+                                If (CondRefOf (^CPVL))
+                                {
+                                    Return (^CPVL) /* External reference */
+                                }
+                                Else
+                                {
+                                    Return (0x0546)
+                                }
+                            }
+                            ElseIf ((_T_0 == 0x03))
+                            {
+                                If (CondRefOf (^I2CF))
+                                {
+                                    Return (^I2CF) /* External reference */
+                                }
+                                Else
+                                {
+                                    Return (0x00061A80)
+                                }
+                            }
+
+                            Break
+                        }
+                    }
+
+                    If ((Arg2 == 0x06))
+                    {
+                        Return (^TZBI) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x07))
+                    {
+                        Name (CMBF, Buffer (0x08){})
+                        CreateDWordField (CMBF, Zero, CMAD)
+                        CreateDWordField (CMBF, 0x04, CMLN)
+                        CMAD = GCMA ()
+                        CMLN = GCML ()
+                        Return (CMBF) /* \_SB_.PEPD._DSM.CMBF */
+                    }
+
+                    If ((Arg2 == 0x08))
+                    {
+                        Return (^GTZT) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x09))
+                    {
+                        Return (^CPGT) /* External reference */
+                    }
+
+                    If ((Arg2 == 0x0A))
+                    {
+                        Return (^GPGT) /* External reference */
+                    }
+                }
+
+                Return (Buffer (One)
+                {
+                     0x00                                             // .
+                })
+            }
+
+            Name (ROST, Zero)
+            Method (NPUR, 1, NotSerialized)
+            {
+                \_SB.PARG._PUR [One] = Arg0
+                Notify (\_SB.PARG, 0x80) // Status Change
+            }
+        }
+
+        Field (CLKR, ByteAcc, NoLock, Preserve)
+        {
+            Offset (0x50), 
+                ,   28, 
+            OSCR,   4, 
+            Offset (0x90), 
+            DVMM,   5, 
+            Offset (0x91), 
+            DVNM,   10, 
+                ,   2, 
+            DVPM,   3, 
+                ,   8, 
+            BYPM,   1, 
+            Offset (0xA0), 
+            DVMP,   5, 
+            Offset (0xA1), 
+            DVNP,   10, 
+                ,   2, 
+            DVPP,   3, 
+                ,   5, 
+            BOVP,   1, 
+                ,   2, 
+            BYPP,   1
+        }
+
+        Method (GREF, 0, NotSerialized)
+        {
+            If ((OSCR == 0x08))
+            {
+                Return (0x2EE0)
+            }
+
+            If ((OSCR == Zero))
+            {
+                Return (0x32C8)
+            }
+
+            If ((OSCR == One))
+            {
+                Return (0x41A0)
+            }
+
+            If ((OSCR == 0x04))
+            {
+                Return (0x4B00)
+            }
+
+            If ((OSCR == 0x0C))
+            {
+                Return (0x6590)
+            }
+
+            If ((OSCR == 0x05))
+            {
+                Return (0x9600)
+            }
+
+            If ((OSCR == 0x09))
+            {
+                Return (0xBB80)
+            }
+
+            Return (Zero)
+        }
+
+        Method (GPLL, 4, NotSerialized)
+        {
+            Local0 = GREF ()
+            If (!Arg3)
+            {
+                Local0 *= Arg0
+                Local1 = (Local0 / Arg1)
+                Local0 = (Local1 >> Arg2)
+            }
+
+            Return (Local0)
+        }
+
+        Method (PLLM, 0, NotSerialized)
+        {
+            Return (GPLL (DVNM, DVMM, DVPM, BYPM))
+        }
+
+        Method (PLLP, 0, NotSerialized)
+        {
+            If (!BOVP)
+            {
+                Return (0x00034BC0)
+            }
+            Else
+            {
+                Return (GPLL (DVNP, DVMP, DVPP, BYPP))
+            }
+        }
+
+        Device (PARG)
+        {
+            Name (_HID, "ACPI000C" /* Processor Aggregator Device */)  // _HID: Hardware ID
+            Name (_PUR, Package (0x02)  // _PUR: Processor Utilization Request
+            {
+                One, 
+                Zero
+            })
+            Method (_OST, 3, NotSerialized)  // _OST: OSPM Status Indication
+            {
+                \_SB.PEPD.ROST = Arg2
+                Notify (\_SB.PEPD, 0xC0) // Hardware-Specific
+            }
+        }
+
+        Device (MCDV)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA020E")
+            }
+
+            Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+            {
+                Memory32Fixed (ReadWrite,
+                    0x70019000,         // Address Base
+                    0x00001000,         // Address Length
+                    )
+                Memory32Fixed (ReadWrite,
+                    0x7001B000,         // Address Base
+                    0x00000800,         // Address Length
+                    )
+                Memory32Fixed (ReadWrite,
+                    0x7000F800,         // Address Base
+                    0x00000400,         // Address Length
+                    )
+                Memory32Fixed (ReadWrite,
+                    0x7000FC00,         // Address Base
+                    0x00000400,         // Address Length
+                    )
+                Memory32Fixed (ReadWrite,
+                    0x6000C000,         // Address Base
+                    0x00000150,         // Address Length
+                    )
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                {
+                    0x0000006D,
+                }
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                {
+                    0x0000006E,
+                }
+            })
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+        }
+
+        Device (UAR1)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0100")
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (CRS3 (0x70006000, 0x40, 0x44, 0x08, Zero))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (CondRefOf (^UDP, Local7))
+                {
+                    If (^UDP)
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^UAAE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Device (UAR2)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0100")
+            }
+
+            Name (_UID, One)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (CRS3 (0x70006040, 0x40, 0x45, 0x09, 0x02))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (CondRefOf (^UDP, Local7))
+                {
+                    If (^UDP)
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^UABE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Device (UAR3)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0100")
+            }
+
+            Name (_UID, 0x02)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (CRS3 (0x70006200, 0x40, 0x4E, 0x0A, 0x04))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (CondRefOf (^UDP, Local7))
+                {
+                    If (^UDP)
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^UACE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Device (UAR4)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0100")
+            }
+
+            Name (_UID, 0x03)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (CRS3 (0x70006300, 0x40, 0x7A, 0x13, 0x06))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (CondRefOf (^UDP, Local7))
+                {
+                    If (^UDP)
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^UADE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Device (UAR5)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0100")
+            }
+
+            Name (_UID, 0x04)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (CRS3 (0x70006400, 0x40, 0x7B, 0x14, 0x08))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (CondRefOf (^UDP, Local7))
+                {
+                    If (^UDP)
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^UAEE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        OperationRegion (GPOP, SystemMemory, 0x6000D000, 0x0800)
+        Field (GPOP, DWordAcc, NoLock, Preserve)
+        {
+            Offset (0x38), 
+            SCI1,   8, 
+            Offset (0x88), 
+            SCF1,   16, 
+            Offset (0x98), 
+            SCE1,   16, 
+            Offset (0xA8), 
+            SCO1,   16, 
+            Offset (0x43C), 
+            SCI2,   8, 
+            Offset (0x48C), 
+            SCF2,   16, 
+            Offset (0x49C), 
+            SCE2,   16, 
+            Offset (0x4AC), 
+            SCO2,   16, 
+            Offset (0x534), 
+            SCI4,   8, 
+            Offset (0x584), 
+            SCF4,   16, 
+            Offset (0x594), 
+            SCE4,   16, 
+            Offset (0x5A4), 
+            SCO4,   16, 
+            Offset (0x634), 
+            SCI5,   8, 
+            Offset (0x63C), 
+            SCI3,   8, 
+            Offset (0x684), 
+            SCF5,   16, 
+            Offset (0x68C), 
+            SCF3,   16, 
+            Offset (0x694), 
+            SCE5,   16, 
+            Offset (0x69C), 
+            SCE3,   16, 
+            Offset (0x6A4), 
+            SCO5,   16, 
+            Offset (0x6AC), 
+            SCO3,   16
+        }
+
+        Method (I2CR, 5, NotSerialized)
+        {
+            Local0 = 0x0A
+            Arg0 = (0x0303 << Arg4)
+            Arg1 = (0x0303 << Arg4)
+            Stall (0x0A)
+            While (Local0)
+            {
+                If ((DerefOf (Arg3) & (0x02 << Arg4)))
+                {
+                    Break
+                }
+                Else
+                {
+                    Arg2 = (0x0100 << Arg4)
+                    Stall (0x05)
+                    Arg2 = (0x0101 << Arg4)
+                    Stall (0x05)
+                    Arg2 = (0x0202 << Arg4)
+                    Stall (0x05)
+                }
+
+                Local0--
+            }
+
+            Arg1 = (0x0300 << Arg4)
+            Arg0 = (0x0300 << Arg4)
+        }
+
+        Method (I2CS, 3, NotSerialized)
+        {
+            Local0 = Zero
+            Arg0 = (0x0303 << Arg2)
+            Stall (0x0A)
+            Local0 = (DerefOf (Arg1) & (0x03 << Arg2))
+            Stall (0x05)
+            Arg0 = (0x0300 << Arg4)
+            Return (Local0)
+        }
+
+        Device (I2C1)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0101")
+            }
+
+            Name (_UID, One)  // _UID: Unique ID
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x09))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (GCRS (0x7000C000, 0x0100, 0x46))
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Method (RST, 0, NotSerialized)
+            {
+                \_SB.I2CR (RefOf (SCF1), RefOf (SCE1), RefOf (SCO1), RefOf (SCI1), 0x04)
+            }
+
+            Method (STA, 0, NotSerialized)
+            {
+                Return (\_SB.I2CS (RefOf (SCF1), RefOf (SCI1), 0x04))
+            }
+        }
+
+        Device (I2C2)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0101")
+            }
+
+            Name (_UID, 0x02)  // _UID: Unique ID
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x09))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (GCRS (0x7000C400, 0x0100, 0x74))
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Method (RST, 0, NotSerialized)
+            {
+                \_SB.I2CR (RefOf (SCF2), RefOf (SCE2), RefOf (SCO2), RefOf (SCI2), 0x05)
+            }
+
+            Method (STA, 0, NotSerialized)
+            {
+                Return (\_SB.I2CS (RefOf (SCF2), RefOf (SCI2), 0x05))
+            }
+        }
+
+        Device (I2C3)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0101")
+            }
+
+            Name (_UID, 0x03)  // _UID: Unique ID
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x09))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (GCRS (0x7000C500, 0x0100, 0x7C))
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Method (RST, 0, NotSerialized)
+            {
+                \_SB.I2CR (RefOf (SCF3), RefOf (SCE3), RefOf (SCO3), RefOf (SCI3), One)
+            }
+
+            Method (STA, 0, NotSerialized)
+            {
+                Return (\_SB.I2CS (RefOf (SCF3), RefOf (SCI3), One))
+            }
+        }
+
+        Device (I2C4)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0101")
+            }
+
+            Name (_UID, 0x04)  // _UID: Unique ID
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x09))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (GCRS (0x7000C700, 0x0100, 0x98))
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Method (RST, 0, NotSerialized)
+            {
+                \_SB.I2CR (RefOf (SCF4), RefOf (SCE4), RefOf (SCO4), RefOf (SCI4), 0x04)
+            }
+
+            Method (STA, 0, NotSerialized)
+            {
+                Return (\_SB.I2CS (RefOf (SCF4), RefOf (SCI4), 0x04))
+            }
+        }
+
+        Device (I2C5)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0101")
+            }
+
+            Name (_UID, 0x05)  // _UID: Unique ID
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x09))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (GCRS (0x7000D000, 0x0100, 0x55))
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Method (RST, 0, NotSerialized)
+            {
+                \_SB.I2CR (RefOf (SCF5), RefOf (SCE5), RefOf (SCO5), RefOf (SCI5), 0x06)
+            }
+
+            Method (STA, 0, NotSerialized)
+            {
+                Return (\_SB.I2CS (RefOf (SCF5), RefOf (SCI5), 0x06))
+            }
+        }
+
+        Device (USB1)
+        {
+            OperationRegion (USCR, SystemMemory, 0x7D000000, 0x1800)
+            Field (USCR, DWordAcc, NoLock, Preserve)
+            {
+                UNID,   16, 
+                Offset (0x154), 
+                TXPR,   32, 
+                Offset (0x174), 
+                SCPR,   32, 
+                Offset (0x1F8), 
+                UMOD,   32
+            }
+
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If ((RDF (0x70000000, 0x0804, 0x0F, 0x10) >= 0x02))
+                {
+                    Return ("NVDA0203")
+                }
+                Else
+                {
+                    Return ("NVDA0103")
+                }
+            }
+
+            Name (_CID, "ACPI\\PNP0D20")  // _CID: Compatible ID
+            Name (_HRV, 0x02)  // _HRV: Hardware Revision
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = (0x7D000000 + 0x0100)
+                Local1 = (0x1800 - 0x0100)
+                Return (UCRS (Local0, Local1, 0x34, 0x03))
+            }
+
+            Name (VAR0, Zero)
+            Name (VAR1, Zero)
+            Name (VAR2, Zero)
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    If (((^VAR0 & 0x03) == 0x03))
+                    {
+                        Return (0x0F)
+                    }
+                    Else
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                If (!^^US1E)
+                {
+                    ^STAF = One
+                    VAR0 = ^UMOD /* \_SB_.USB1.UMOD */
+                    If (((^UMOD & 0x03) == 0x03))
+                    {
+                        Return (0x0F)
+                    }
+                    Else
+                    {
+                        Return (Zero)
+                    }
+                }
+
+                Return (Zero)
+            }
+
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                VAR0 = ^UMOD /* \_SB_.USB1.UMOD */
+                VAR1 = ^SCPR /* \_SB_.USB1.SCPR */
+                VAR2 = ^TXPR /* \_SB_.USB1.TXPR */
+            }
+
+            Method (_UBF, 0, NotSerialized)
+            {
+                ^UMOD = VAR0 /* \_SB_.USB1.VAR0 */
+                ^SCPR = VAR1 /* \_SB_.USB1.VAR1 */
+                ^TXPR = VAR2 /* \_SB_.USB1.VAR2 */
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == Zero))
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x03                                             // .
+                            })
+                        }
+                    }
+                    ElseIf ((Arg2 == One))
+                    {
+                        ^_UBF ()
+                    }
+                }
+                Else
+                {
+                    Return (Buffer (One)
+                    {
+                         0x00                                             // .
+                    })
+                }
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+            Name (_S4W, 0x03)  // _S4W: S4 Device Wake State
+        }
+
+        Device (WDBG)
+        {
+            OperationRegion (USCR, SystemMemory, 0x7D000000, 0x1800)
+            Field (USCR, DWordAcc, NoLock, Preserve)
+            {
+                UNID,   16, 
+                Offset (0x154), 
+                TXPR,   32, 
+                Offset (0x174), 
+                SCPR,   32, 
+                Offset (0x1F8), 
+                UMOD,   32
+            }
+
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If ((RDF (0x70000000, 0x0804, 0x0F, 0x10) >= 0x02))
+                {
+                    Return ("NVDA0202")
+                }
+                Else
+                {
+                    Return ("NVDA0102")
+                }
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = (0x7D000000 + 0x0100)
+                Local1 = (0x1800 - 0x0100)
+                Return (UCRS (Local0, Local1, 0x34, One))
+            }
+
+            Name (VAR0, Zero)
+            Name (VAR1, Zero)
+            Name (VAR2, Zero)
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    If (((^VAR0 & 0x03) == 0x03))
+                    {
+                        Return (Zero)
+                    }
+                    Else
+                    {
+                        Return (0x0F)
+                    }
+                }
+
+                If (!^^US1E)
+                {
+                    ^STAF = One
+                    VAR0 = ^UMOD /* \_SB_.WDBG.UMOD */
+                    If (((^UMOD & 0x03) == 0x03))
+                    {
+                        Return (Zero)
+                    }
+                    Else
+                    {
+                        Return (0x0F)
+                    }
+                }
+
+                Return (Zero)
+            }
+
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                VAR0 = ^UMOD /* \_SB_.WDBG.UMOD */
+                VAR1 = ^SCPR /* \_SB_.WDBG.SCPR */
+                VAR2 = ^TXPR /* \_SB_.WDBG.TXPR */
+            }
+
+            Method (_UBF, 0, NotSerialized)
+            {
+                ^UMOD = VAR0 /* \_SB_.WDBG.VAR0 */
+                ^SCPR = VAR1 /* \_SB_.WDBG.VAR1 */
+                ^TXPR = VAR2 /* \_SB_.WDBG.VAR2 */
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == Zero))
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x03                                             // .
+                            })
+                        }
+                    }
+                    ElseIf ((Arg2 == One))
+                    {
+                        ^_UBF ()
+                    }
+                }
+                Else
+                {
+                    Return (Buffer (One)
+                    {
+                         0x00                                             // .
+                    })
+                }
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+        }
+
+        Device (USB2)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If ((RDF (0x70000000, 0x0804, 0x0F, 0x10) >= 0x02))
+                {
+                    Return ("NVDA0203")
+                }
+                Else
+                {
+                    Return ("NVDA0103")
+                }
+            }
+
+            Name (_CID, "ACPI\\PNP0D20")  // _CID: Compatible ID
+            Name (_HRV, 0x02)  // _HRV: Hardware Revision
+            Name (_UID, One)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = (0x7D004000 + 0x0100)
+                Local1 = (0x1800 - 0x0100)
+                Return (UCRS (Local0, Local1, 0x35, 0x03))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Debug = "*************************** USB2 _STA forced off"
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Debug = "*************************** USB2 _STA on"
+                    Return (0x0F)
+                }
+
+                If (!^^US2E)
+                {
+                    ^STAF = One
+                    Debug = "*************************** USB2 _STA on (initial)"
+                    Return (0x0F)
+                }
+
+                Debug = "*************************** USB2 _STA controller is off"
+                Return (Zero)
+            }
+
+            Name (VAR0, Zero)
+            Name (VAR1, Zero)
+            Name (VAR2, Zero)
+            Name (VAR3, Zero)
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^VAR0 = RDR (0x7D004000, 0x01F8)
+                ^VAR1 = RDR (0x7D004000, 0x0174)
+                ^VAR2 = RDR (0x7D004000, 0x0154)
+                ^VAR3 = RDR (0x7D004000, 0x0400)
+            }
+
+            Method (_UBF, 0, NotSerialized)
+            {
+                Local0 = Zero
+                WRR (0x7D004000, 0x01F8, ^VAR0)
+                WRR (0x7D004000, 0x0174, ^VAR1)
+                WRR (0x7D004000, 0x0154, ^VAR2)
+                If ((^VAR3 & (One << 0x13)))
+                {
+                    If (!HSIC ())
+                    {
+                        Local0 = 0xC0000001
+                    }
+                }
+
+                Return (Local0)
+            }
+
+            Method (HSIC, 0, NotSerialized)
+            {
+                WRF (0x7D004000, 0x0C24, One, 0x05, Zero)
+                WRR (0x7D004000, 0x0174, Zero)
+                WRF (0x7D004000, 0x0C20, One, 0x03, One)
+                WRF (0x7D004000, 0x0C20, One, 0x0C, One)
+                WRF (0x7D004000, 0x0C20, One, 0x09, One)
+                WRF (0x7D004000, 0x0400, One, 0x0E, One)
+                WRF (0x7D004000, 0x0C08, 0x1F, 0x0D, 0x11)
+                WRF (0x7D004000, 0x0C08, 0x1F, 0x02, 0x10)
+                WRF (0x7D004000, 0x0C08, 0x1F, 0x08, 0x10)
+                WRF (0x7D004000, 0x0C0C, 0x1F, One, 0x09)
+                WRF (0x7D004000, 0x0C14, One, 0x07, One)
+                WRF (0x7D004000, 0x0C18, 0x0FFF, 0x02, 0x2F)
+                WRF (0x7D004000, 0x0C04, 0x1F, 0x0E, 0x02)
+                WRF (0x7D004000, 0x0C04, 0x0FFF, Zero, 0x01CA)
+                WRF (0x7D004000, 0x0C10, One, 0x09, Zero)
+                WRF (0x7D004000, 0x0400, One, 0x0E, Zero)
+                WRF (0x7D004000, 0x01F8, 0x03, Zero, 0x03)
+                WRF (0x7D004000, 0x0174, One, 0x0C, One)
+                WRF (0x7D004000, 0x01B4, 0x07, 0x1D, 0x04)
+                WRF (0x7D004000, 0x01B4, 0x03, 0x19, 0x02)
+                WRF (0x7D004000, 0x01B4, One, 0x1C, Zero)
+                Local0 = 0x64
+                While (Local0)
+                {
+                    If (RDF (0x7D004000, 0x0400, One, 0x07))
+                    {
+                        Break
+                    }
+
+                    Sleep (One)
+                    Local0--
+                }
+
+                WRF (0x7D004000, 0x0174, One, 0x08, One)
+                While (RDF (0x7D004000, 0x0174, One, 0x08))
+                {
+                    Sleep (One)
+                }
+
+                WRF (0x7D004000, 0x0C24, One, 0x05, One)
+                WRF (0x7D004000, 0x0C20, One, 0x0C, Zero)
+                WRF (0x7D004000, 0x0C20, One, 0x09, Zero)
+                WRF (0x7D004000, 0x0C20, One, 0x03, Zero)
+                WRF (0x7D004000, 0x0174, One, 0x08, One)
+                Return (Local0)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == Zero))
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x03                                             // .
+                            })
+                        }
+                    }
+                    ElseIf ((Arg2 == One))
+                    {
+                        Return (^_UBF ())
+                    }
+                }
+                Else
+                {
+                    Return (Buffer (One)
+                    {
+                         0x00                                             // .
+                    })
+                }
+            }
+
+            Method (_DEP, 0, NotSerialized)  // _DEP: Dependencies
+            {
+                If (CondRefOf (^BBR))
+                {
+                    ^BBR ()
+                }
+
+                Return (Package (0x01)
+                {
+                    \_SB.PEPD
+                })
+            }
+
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+            Name (_S4W, 0x03)  // _S4W: S4 Device Wake State
+        }
+
+        Device (USB3)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If ((RDF (0x70000000, 0x0804, 0x0F, 0x10) >= 0x02))
+                {
+                    Return ("NVDA0203")
+                }
+                Else
+                {
+                    Return ("NVDA0103")
+                }
+            }
+
+            Name (_CID, "ACPI\\PNP0D20")  // _CID: Compatible ID
+            Name (_HRV, 0x02)  // _HRV: Hardware Revision
+            Name (_UID, 0x02)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = (0x7D008000 + 0x0100)
+                Local1 = (0x1800 - 0x0100)
+                Return (UCRS (Local0, Local1, 0x81, 0x03))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^US3E)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (VAR0, Zero)
+            Name (VAR1, Zero)
+            Name (VAR2, Zero)
+            Name (VAR3, Zero)
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^VAR0 = RDR (0x7D008000, 0x01F8)
+                ^VAR1 = RDR (0x7D008000, 0x0174)
+                ^VAR2 = RDR (0x7D008000, 0x0154)
+                ^VAR3 = RDR (0x7D008000, 0x0400)
+            }
+
+            Method (_UBF, 0, NotSerialized)
+            {
+                Local0 = Zero
+                WRR (0x7D008000, 0x01F8, ^VAR0)
+                WRR (0x7D008000, 0x0174, ^VAR1)
+                WRR (0x7D008000, 0x0154, ^VAR2)
+                If ((^VAR3 & (One << 0x13)))
+                {
+                    If (!HSIC ())
+                    {
+                        Local0 = 0xC0000001
+                    }
+                }
+
+                Return (Local0)
+            }
+
+            Method (HSIC, 0, NotSerialized)
+            {
+                WRF (0x7D008000, 0x0C24, One, 0x05, One)
+                WRR (0x7D008000, 0x0174, Zero)
+                WRF (0x7D008000, 0x0400, One, 0x0E, One)
+                WRF (0x7D008000, 0x0C08, 0x1F, 0x0D, 0x11)
+                WRF (0x7D008000, 0x0C08, 0x1F, 0x02, 0x10)
+                WRF (0x7D008000, 0x0C08, 0x1F, 0x08, 0x10)
+                WRF (0x7D008000, 0x0C0C, 0x1F, One, 0x09)
+                WRF (0x7D008000, 0x0C14, One, 0x07, One)
+                WRF (0x7D008000, 0x0C18, 0x0FFF, 0x02, 0x2F)
+                WRF (0x7D008000, 0x0C04, 0x1F, 0x0E, 0x02)
+                WRF (0x7D008000, 0x0C04, 0x0FFF, Zero, 0x01CA)
+                WRF (0x7D008000, 0x0C10, One, 0x09, Zero)
+                WRF (0x7D008000, 0x0400, One, 0x0E, Zero)
+                WRF (0x7D008000, 0x01F8, 0x03, Zero, 0x03)
+                WRF (0x7D008000, 0x0174, One, 0x0C, One)
+                WRF (0x7D008000, 0x01B4, 0x07, 0x1D, 0x04)
+                WRF (0x7D008000, 0x01B4, 0x03, 0x19, 0x02)
+                WRF (0x7D008000, 0x01B4, One, 0x1C, Zero)
+                Local0 = 0x64
+                While (Local0)
+                {
+                    If (RDF (0x7D008000, 0x0400, One, 0x07))
+                    {
+                        Break
+                    }
+
+                    Sleep (One)
+                    Local0--
+                }
+
+                Return (Local0)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == Zero))
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x03                                             // .
+                            })
+                        }
+                    }
+                    ElseIf ((Arg2 == One))
+                    {
+                        Return (^_UBF ())
+                    }
+                }
+                Else
+                {
+                    Return (Buffer (One)
+                    {
+                         0x00                                             // .
+                    })
+                }
+            }
+
+            Method (_DEP, 0, NotSerialized)  // _DEP: Dependencies
+            {
+                If (CondRefOf (^BBR))
+                {
+                    ^BBR ()
+                }
+
+                Return (Package (0x01)
+                {
+                    \_SB.PEPD
+                })
+            }
+
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+            Name (_S4W, 0x03)  // _S4W: S4 Device Wake State
+        }
+
+        Device (XUSB)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0214")
+            }
+
+            Name (_CID, Package (0x02)  // _CID: Compatible ID
+            {
+                "ACPI\\PNP0D10", 
+                "ACPI\\PNP0D15"
+            })
+            Name (_HRV, One)  // _HRV: Hardware Revision
+            Name (_UID, Zero)  // _UID: Unique ID
+            Name (RSRC, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite,
+                    0x70090000,         // Address Base
+                    0x0000A000,         // Address Length
+                    )
+                Memory32Fixed (ReadWrite,
+                    0x7009F000,         // Address Base
+                    0x00001000,         // Address Length
+                    )
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Shared, ,, )
+                {
+                    0x00000047,
+                }
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Shared, ,, )
+                {
+                    0x00000048,
+                }
+                Interrupt (ResourceConsumer, Level, ActiveHigh, SharedAndWake, ,, )
+                {
+                    0x00000051,
+                }
+            })
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Return (RSRC) /* \_SB_.XUSB.RSRC */
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^XUSE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_DEP, Package (One)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+            Device (RHUB)
+            {
+                Name (_ADR, Zero)  // _ADR: Address
+                Device (PRT1)
+                {
+                    Name (_ADR, One)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        0xFF, 
+                        0x03, 
+                        Zero, 
+                        Zero
+                    })
+                    Name (_PLD, ToPLD (
+                        PLD_Revision           = 0x2,
+                        PLD_IgnoreColor        = 0x1,
+                        PLD_Red                = 0x0,
+                        PLD_Green              = 0x0,
+                        PLD_Blue               = 0x0,
+                        PLD_Width              = 0x0,
+                        PLD_Height             = 0x0,
+                        PLD_UserVisible        = 0x1,
+                        PLD_Dock               = 0x0,
+                        PLD_Lid                = 0x0,
+                        PLD_Panel              = "BACK",
+                        PLD_VerticalPosition   = "CENTER",
+                        PLD_HorizontalPosition = "LEFT",
+                        PLD_Shape              = "VERTICALRECTANGLE",
+                        PLD_GroupOrientation   = 0x0,
+                        PLD_GroupToken         = 0x0,
+                        PLD_GroupPosition      = 0x0,
+                        PLD_Bay                = 0x0,
+                        PLD_Ejectable          = 0x1,
+                        PLD_EjectRequired      = 0x1,
+                        PLD_CabinetNumber      = 0x0,
+                        PLD_CardCageNumber     = 0x0,
+                        PLD_Reference          = 0x0,
+                        PLD_Rotation           = 0x0,
+                        PLD_Order              = 0x0)
+)  // _PLD: Physical Location of Device
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (Zero)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT2)
+                {
+                    Name (_ADR, 0x02)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        Zero, 
+                        0xFF, 
+                        Zero, 
+                        Zero
+                    })
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (Zero)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT3)
+                {
+                    Name (_ADR, 0x03)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        Zero, 
+                        0xFF, 
+                        Zero, 
+                        Zero
+                    })
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (Zero)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT4)
+                {
+                    Name (_ADR, 0x04)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        0xFF, 
+                        0x03, 
+                        Zero, 
+                        Zero
+                    })
+                    Name (_PLD, ToPLD (
+                        PLD_Revision           = 0x2,
+                        PLD_IgnoreColor        = 0x1,
+                        PLD_Red                = 0x0,
+                        PLD_Green              = 0x0,
+                        PLD_Blue               = 0x0,
+                        PLD_Width              = 0x0,
+                        PLD_Height             = 0x0,
+                        PLD_UserVisible        = 0x1,
+                        PLD_Dock               = 0x0,
+                        PLD_Lid                = 0x0,
+                        PLD_Panel              = "BACK",
+                        PLD_VerticalPosition   = "CENTER",
+                        PLD_HorizontalPosition = "LEFT",
+                        PLD_Shape              = "VERTICALRECTANGLE",
+                        PLD_GroupOrientation   = 0x0,
+                        PLD_GroupToken         = 0x0,
+                        PLD_GroupPosition      = 0x0,
+                        PLD_Bay                = 0x0,
+                        PLD_Ejectable          = 0x1,
+                        PLD_EjectRequired      = 0x1,
+                        PLD_CabinetNumber      = 0x0,
+                        PLD_CardCageNumber     = 0x0,
+                        PLD_Reference          = 0x0,
+                        PLD_Rotation           = 0x0,
+                        PLD_Order              = 0x0)
+)  // _PLD: Physical Location of Device
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (Zero)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT5)
+                {
+                    Name (_ADR, 0x05)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        Zero, 
+                        0xFF, 
+                        Zero, 
+                        Zero
+                    })
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (Zero)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT6)
+                {
+                    Name (_ADR, 0x06)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        Zero, 
+                        0xFF, 
+                        Zero, 
+                        Zero
+                    })
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (One)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+
+                Device (PRT7)
+                {
+                    Name (_ADR, 0x07)  // _ADR: Address
+                    Name (_UPC, Package (0x04)  // _UPC: USB Port Capabilities
+                    {
+                        Zero, 
+                        0xFF, 
+                        Zero, 
+                        Zero
+                    })
+                    Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+                    {
+                        If ((Arg0 == ToUUID ("ce2ee385-00e6-48cb-9f05-2edb927c4899") /* USB Controller */))
+                        {
+                            If ((Arg2 == Zero))
+                            {
+                                If ((Arg1 == Zero))
+                                {
+                                    Return (Buffer (One)
+                                    {
+                                         0x05                                             // .
+                                    })
+                                }
+                            }
+                            ElseIf ((Arg2 == 0x02))
+                            {
+                                Return (One)
+                            }
+                        }
+                        Else
+                        {
+                            Return (Buffer (One)
+                            {
+                                 0x00                                             // .
+                            })
+                        }
+                    }
+                }
+            }
+
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+            Name (_S4W, 0x03)  // _S4W: S4 Device Wake State
+        }
+
+        Device (NVSC)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0110")
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.SDM4.STOR.EMMC
+            })
+        }
+
+        Device (NVSE)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA010D")
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Name (SBUF, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite,
+                    0x70012000,         // Address Base
+                    0x00002000,         // Address Length
+                    )
+                Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                {
+                    0x0000005A,
+                }
+            })
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = ^SBUF /* \_SB_.NVSE.SBUF */
+                Return (Local0)
+            }
+
+            Name (_HRV, Zero)  // _HRV: Hardware Revision
+            Name (JSID, Zero)
+            Method (_INI, 0, NotSerialized)  // _INI: Initialize
+            {
+                ^_HRV = CHID /* \_SB_.CHID */
+                If (CondRefOf (^JSIS))
+                {
+                    JSID = ^JSIS /* External reference */
+                }
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Device (GFXC)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If (CondRefOf (^DODF))
+                {
+                    If (^DODF)
+                    {
+                        ^DODF++
+                    }
+                }
+
+                Return ("NVDA0205")
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Name (_CLS, 0x0003000000000000)  // _CLS: Class Code
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Name (VBUF, ResourceTemplate ()
+                {
+                    Memory32Fixed (ReadWrite,
+                        0x50000000,         // Address Base
+                        0x05000000,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0x60007000,         // Address Base
+                        0x00001000,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0x60001000,         // Address Base
+                        0x00001000,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0x6000F000,         // Address Base
+                        0x00001000,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0xB0000000,         // Address Base
+                        0x04000000,         // Address Length
+                        _Y09)
+                    Memory32Fixed (ReadWrite,
+                        0x7000A000,         // Address Base
+                        0x00000100,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0x60005060,         // Address Base
+                        0x00000008,         // Address Length
+                        )
+                    Memory32Fixed (ReadWrite,
+                        0x700E3000,         // Address Base
+                        0x00000100,         // Address Length
+                        )
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000024,
+                    }
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000061,
+                    }
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000063,
+                    }
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000068,
+                    }
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000069,
+                    }
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x0000006A,
+                    }
+                })
+                CreateDWordField (VBUF, \_SB.GFXC._CRS._Y09._BAS, GCBA)  // _BAS: Base Address
+                CreateDWordField (VBUF, \_SB.GFXC._CRS._Y09._LEN, GCLE)  // _LEN: Length
+                GCBA = \_SB.FMGB
+                GCLE = \_SB.FMGL
+                Local0 = VBUF /* \_SB_.GFXC._CRS.VBUF */
+                If (CondRefOf (^CRSA))
+                {
+                    ConcatenateResTemplate (VBUF, ^CRSA, Local0)
+                }
+
+                Return (Local0)
+            }
+
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                Return (0x0F)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("d4a50b75-65c7-46f7-bfb7-41514cea0244")))
+                {
+                    While (One)
+                    {
+                        Name (_T_0, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                        _T_0 = Arg2
+                        If ((_T_0 == Zero))
+                        {
+                            Local0 = Zero
+                            Local0 |= (One << Zero)
+                            Local0 |= (One << 0x10)
+                            If (CondRefOf (^MDTL))
+                            {
+                                If ((\_SB.GFXC.MDTL == One))
+                                {
+                                    Local0 |= (One << 0x06)
+                                    Local0 |= (One << 0x05)
+                                }
+                            }
+
+                            If (CondRefOf (^BKLP))
+                            {
+                                Local0 |= (One << 0x14)
+                            }
+
+                            If (CondRefOf (^SGIO))
+                            {
+                                Local0 |= (One << 0x18)
+                            }
+
+                            Return (Local0)
+                        }
+                        ElseIf ((_T_0 == 0x10))
+                        {
+                            Return (GOBT (Arg3))
+                        }
+                        ElseIf ((_T_0 == 0x14))
+                        {
+                            Return (^BKLP) /* External reference */
+                        }
+                        ElseIf ((_T_0 == 0x05))
+                        {
+                            Debug = "NBCI_DISPLAYSTATUS"
+                            Return (DSMS (Arg3))
+                        }
+                        ElseIf ((_T_0 == 0x06))
+                        {
+                            Debug = "NBCI_MDTL"
+                            Local0 = GDOD (\_SB.GFXC._DOD)
+                            Return (GGMP (Local0))
+                        }
+                        ElseIf ((_T_0 == 0x18))
+                        {
+                            If (CondRefOf (^SGIO))
+                            {
+                                Return (SGIO) /* External reference */
+                                Arg3
+                            }
+                        }
+                        Else
+                        {
+                            Return (0x80000002)
+                        }
+
+                        Break
+                    }
+                }
+
+                Return (Buffer (One)
+                {
+                     0x00                                             // .
+                })
+            }
+
+            Method (GOBT, 1, NotSerialized)
+            {
+                CreateWordField (Arg0, 0x02, USRG)
+                CreateWordField (Arg0, Zero, OIND)
+                Name (NBBU, Buffer (0x10)
+                {
+                     0x00                                             // .
+                })
+                CreateWordField (NBBU, 0x08, NBB1)
+                CreateDWordField (NBBU, 0x0A, NBB2)
+                If ((USRG == 0x5447))
+                {
+                    Name (TBUF, Buffer (0x08)
+                    {
+                         0x00                                             // .
+                    })
+                    CreateDWordField (TBUF, Zero, IDBU)
+                    CreateDWordField (TBUF, Zero, FLG0)
+                    NBB1 = 0x5447
+                    IDBU = \_SB.CHID
+                    If (CondRefOf (^TGF0))
+                    {
+                        FLG0 = ^TGF0 /* External reference */
+                    }
+
+                    NBB2 = (0x08 + SizeOf (NBBU))
+                    Return (Concatenate (NBBU, TBUF))
+                }
+
+                If ((USRG == 0x5444))
+                {
+                    If (CondRefOf (^DCBB))
+                    {
+                        NBB1 = 0x5444
+                        Local0 = ^DCBB /* External reference */
+                        NBB2 = (SizeOf (Local0) + SizeOf (NBBU))
+                        Return (Concatenate (NBBU, Local0))
+                    }
+                }
+
+                If ((USRG == 0x5443))
+                {
+                    If (CondRefOf (^TCBB))
+                    {
+                        NBB1 = 0x5443
+                        Local0 = ^TCBB /* External reference */
+                        NBB2 = (SizeOf (Local0) + SizeOf (NBBU))
+                        Return (Concatenate (NBBU, Local0))
+                    }
+                }
+
+                If ((USRG == 0x5450))
+                {
+                    If (CondRefOf (^TPBB))
+                    {
+                        NBB1 = 0x5450
+                        Local0 = ^TPBB /* External reference */
+                        NBB2 = (SizeOf (Local0) + SizeOf (NBBU))
+                        Return (Concatenate (NBBU, Local0))
+                    }
+                }
+
+                If ((USRG == 0x5453))
+                {
+                    If (CondRefOf (^DSIB))
+                    {
+                        NBB1 = 0x5453
+                        Local0 = ^DSIB /* External reference */
+                        NBB2 = (SizeOf (Local0) + SizeOf (NBBU))
+                        Return (Concatenate (NBBU, Local0))
+                    }
+                }
+
+                If ((USRG == 0x5454))
+                {
+                    If (CondRefOf (^TTCB, Local7))
+                    {
+                        NBB1 = 0x5454
+                        Local0 = ^TTCB /* External reference */
+                        NBB2 = (SizeOf (Local0) + SizeOf (NBBU))
+                        Return (Concatenate (NBBU, Local0))
+                    }
+                }
+
+                If ((USRG == 0x4452))
+                {
+                    If ((OIND == Zero))
+                    {
+                        If (CondRefOf (^DRBB))
+                        {
+                            Return (^DRBB) /* External reference */
+                        }
+                        Else
+                        {
+                            Return (Buffer (0xC5)
+                            {
+                                /* 0000 */  0xF6, 0x47, 0xEF, 0x8B, 0xAB, 0x56, 0x72, 0xFD,  // .G...Vr.
+                                /* 0008 */  0x52, 0x44, 0xC5, 0x00, 0x00, 0x00, 0x00, 0x01,  // RD......
+                                /* 0010 */  0x00, 0x00, 0x00, 0x00, 0xDE, 0x10, 0x00, 0x00,  // ........
+                                /* 0018 */  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // ........
+                                /* 0020 */  0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x00,  // ......4.
+                                /* 0028 */  0x00, 0x00, 0x01, 0x00, 0x47, 0x00, 0x00, 0x00,  // ....G...
+                                /* 0030 */  0x02, 0x00, 0x45, 0x00, 0x00, 0x00, 0x03, 0x00,  // ..E.....
+                                /* 0038 */  0x75, 0x00, 0x00, 0x00, 0x04, 0x00, 0x73, 0x00,  // u.....s.
+                                /* 0040 */  0x00, 0x00, 0x05, 0x00, 0x71, 0x00, 0x00, 0x00,  // ....q...
+                                /* 0048 */  0x06, 0x00, 0x6F, 0x00, 0x00, 0x00, 0x07, 0x00,  // ..o.....
+                                /* 0050 */  0x6D, 0x00, 0x00, 0x00, 0x08, 0x00, 0x6B, 0x00,  // m.....k.
+                                /* 0058 */  0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD9, 0x1C,  // ........
+                                /* 0060 */  0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,  // ........
+                                /* 0068 */  0x41, 0x5D, 0xC9, 0x00, 0x01, 0x24, 0x2E, 0x00,  // A]...$..
+                                /* 0070 */  0x02, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x01,  // ........
+                                /* 0078 */  0x00, 0x00, 0x00, 0xD9, 0x1C, 0x04, 0x00, 0x00,  // ........
+                                /* 0080 */  0x00, 0x0A, 0x00, 0x00, 0x00, 0xF0, 0x9B, 0x88,  // ........
+                                /* 0088 */  0x00, 0xF0, 0x35, 0xD1, 0x00, 0x60, 0x4F, 0x4F,  // ..5..`OO
+                                /* 0090 */  0x01, 0x90, 0xD2, 0xC6, 0x02, 0x50, 0x08, 0xD3,  // .....P..
+                                /* 0098 */  0x03, 0xC0, 0xE0, 0x9E, 0x00, 0xA0, 0x06, 0xB6,  // ........
+                                /* 00A0 */  0x00, 0x80, 0xF5, 0x91, 0x00, 0x40, 0xBD, 0x6B,  // .....@.k
+                                /* 00A8 */  0x4B, 0x60, 0x9D, 0x44, 0x01, 0x00, 0x00, 0x00,  // K`.D....
+                                /* 00B0 */  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // ........
+                                /* 00B8 */  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // ........
+                                /* 00C0 */  0x00, 0x00, 0x00, 0x00, 0x00                     // .....
+                            })
+                        }
+                    }
+                }
+
+                Return (0x80000002)
+            }
+
+            Method (GDOD, 1, NotSerialized)
+            {
+                Name (DOD1, Package (One){})
+                Name (DOD2, Package (0x02){})
+                Name (DOD3, Package (0x03){})
+                Local0 = SizeOf (Arg0)
+                Local1 = Zero
+                Local2 = Zero
+                While ((Local1 < Local0))
+                {
+                    If ((Local2 < 0x03))
+                    {
+                        If ((DerefOf (Arg0 [Local1]) == 0x80007330))
+                        {
+                            DOD3 [Local2] = DerefOf (Arg0 [Local1])
+                            Local2++
+                        }
+
+                        If ((DerefOf (Arg0 [Local1]) == 0x80000100))
+                        {
+                            DOD3 [Local2] = DerefOf (Arg0 [Local1])
+                            Local2++
+                        }
+
+                        If ((DerefOf (Arg0 [Local1]) == 0x0110))
+                        {
+                            DOD3 [Local2] = DerefOf (Arg0 [Local1])
+                            Local2++
+                        }
+                    }
+
+                    Local1++
+                }
+
+                If ((Local2 == One))
+                {
+                    DOD1 [Zero] = DerefOf (DOD3 [Zero])
+                    Return (DOD1) /* \_SB_.GFXC.GDOD.DOD1 */
+                }
+
+                If ((Local2 == 0x02))
+                {
+                    DOD2 [Zero] = DerefOf (DOD3 [Zero])
+                    DOD2 [One] = DerefOf (DOD3 [One])
+                    Return (DOD2) /* \_SB_.GFXC.GDOD.DOD2 */
+                }
+
+                Return (DOD3) /* \_SB_.GFXC.GDOD.DOD3 */
+            }
+
+            Method (CMES, 1, NotSerialized)
+            {
+                Local0 = Arg0
+                Local1 = (Local0 * 0x02)
+                Local2 = Zero
+                Local0--
+                While (Local0)
+                {
+                    Local2 += Local0
+                    Local0--
+                }
+
+                Local2 *= 0x03
+                Return ((Local1 + Local2))
+            }
+
+            Name (TPK1, Package (0x02){})
+            Name (TPK2, Package (0x07){})
+            Name (TPK3, Package (0x0F){})
+            Name (TPK4, Package (0x1A){})
+            Name (TPK5, Package (0x28){})
+            Name (TPK6, Package (0x39){})
+            Name (TPK7, Package (0x4D){})
+            Name (TPK8, Package (0x64){})
+            Method (GGMP, 1, NotSerialized)
+            {
+                Local0 = SizeOf (Arg0)
+                If ((Local0 > 0x08))
+                {
+                    Local0 = 0x08
+                }
+
+                Local0 = CMES (Local0)
+                If ((Local0 == 0x02))
+                {
+                    Local6 = ^TPK1 /* \_SB_.GFXC.TPK1 */
+                }
+
+                If ((Local0 == 0x07))
+                {
+                    Local6 = ^TPK2 /* \_SB_.GFXC.TPK2 */
+                }
+
+                If ((Local0 == 0x0F))
+                {
+                    Local6 = ^TPK3 /* \_SB_.GFXC.TPK3 */
+                }
+
+                If ((Local0 == 0x1A))
+                {
+                    Local6 = ^TPK4 /* \_SB_.GFXC.TPK4 */
+                }
+
+                If ((Local0 == 0x28))
+                {
+                    Local6 = ^TPK5 /* \_SB_.GFXC.TPK5 */
+                }
+
+                If ((Local0 == 0x39))
+                {
+                    Local6 = ^TPK6 /* \_SB_.GFXC.TPK6 */
+                }
+
+                If ((Local0 == 0x4D))
+                {
+                    Local6 = ^TPK7 /* \_SB_.GFXC.TPK7 */
+                }
+
+                If ((Local0 == 0x64))
+                {
+                    Local6 = ^TPK8 /* \_SB_.GFXC.TPK8 */
+                }
+
+                Local0 = Zero
+                Local1 = Zero
+                Local2 = SizeOf (Arg0)
+                While (Local2)
+                {
+                    Local6 [Local1] = DerefOf (Arg0 [Local0])
+                    Local1++
+                    Local6 [Local1] = 0x2C
+                    Local1++
+                    Local0++
+                    Local2--
+                }
+
+                Local2 = SizeOf (Arg0)
+                Local2--
+                Local0 = Zero
+                While (Local2)
+                {
+                    Local3 = Local0
+                    Local4 = Local2
+                    While (Local4)
+                    {
+                        Local6 [Local1] = DerefOf (Arg0 [Local0])
+                        Local1++
+                        Local3++
+                        Local6 [Local1] = DerefOf (Arg0 [Local3])
+                        Local1++
+                        Local6 [Local1] = 0x2C
+                        Local1++
+                        Local4--
+                    }
+
+                    Local0++
+                    Local2--
+                }
+
+                Return (Local6)
+            }
+
+            Name (CTOI, Zero)
+            Method (DSMS, 1, NotSerialized)
+            {
+                Name (NFBU, Buffer (0x04)
+                {
+                     0x00                                             // .
+                })
+                CreateField (NFBU, Zero, 0x04, DAVF)
+                CreateField (NFBU, 0x04, One, LIDF)
+                CreateField (NFBU, 0x08, 0x06, DTOG)
+                CreateField (NFBU, 0x14, One, LIDS)
+                If ((DerefOf (Arg0 [0x03]) & One))
+                {
+                    Local0 = DerefOf (Arg0 [One])
+                    Local0 >>= 0x04
+                    Local1 = DerefOf (Arg0 [0x02])
+                    Local1 <<= 0x04
+                    Local0 |= Local1
+                    CTOI = ^GATD (Local0)
+                    Local0 = (CTOI + One)
+                    If ((Local0 > ^TTIN ()))
+                    {
+                        Local0 = One
+                    }
+
+                    DTOG = Local0
+                }
+                ElseIf ((DerefOf (Arg0 [0x03]) & 0x80))
+                {
+                    Local0 = DerefOf (Arg0 [0x03])
+                    Local0 &= 0x3E
+                    Local0 >>= One
+                    CTOI = Local0
+                    DTOG = CTOI /* \_SB_.GFXC.CTOI */
+                }
+                Else
+                {
+                    DTOG = CTOI /* \_SB_.GFXC.CTOI */
+                    If (CondRefOf (^LIDB))
+                    {
+                        LIDS = \_SB.GFXC.LIDB /* External reference */
+                    }
+                }
+
+                Return (NFBU) /* \_SB_.GFXC.DSMS.NFBU */
+            }
+
+            Method (TTIN, 0, NotSerialized)
+            {
+                Local0 = GDOD (\_SB.GFXC._DOD)
+                Local1 = SizeOf (Local0)
+                Local0 = Zero
+                While (Local1)
+                {
+                    Local0 += Local1
+                    Local1--
+                }
+
+                Return (Local0)
+            }
+
+            Method (GATD, 1, NotSerialized)
+            {
+                Local0 = GDOD (\_SB.GFXC._DOD)
+                Local1 = SizeOf (Local0)
+                Local2 = One
+                Local3 = One
+                While (Local1)
+                {
+                    Local1--
+                    If ((Arg0 == Local3))
+                    {
+                        Return (Local2)
+                    }
+
+                    Local3 <<= One
+                    Local2++
+                }
+
+                Local1 = SizeOf (Local0)
+                Local3 = 0x02
+                Local4 = One
+                Local1--
+                While (Local1)
+                {
+                    Local5 = Local1
+                    Local6 = Local3
+                    While (Local5)
+                    {
+                        If ((Arg0 == (Local4 | Local6)))
+                        {
+                            Return (Local2)
+                        }
+
+                        Local6 <<= One
+                        Local2++
+                        Local5--
+                    }
+
+                    Local3 <<= One
+                    Local4 <<= One
+                    Local1--
+                }
+
+                Return (One)
+            }
+        }
+
+        Device (SDM1)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If (^^TOOS)
+                {
+                    Return ("NVDA0212")
+                }
+
+                Return ("NVDA0112")
+            }
+
+            Name (_CID, "PNP0D40" /* SDA Standard Compliant SD Host Controller */)  // _CID: Compatible ID
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = GCRS (0x78000000, 0x0200, 0x2E)
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    ConcatenateResTemplate (Local0, ^CRSA, Local1)
+                    Local0 = Local1
+                }
+
+                Return (Local0)
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^SD1E)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Method (_DEP, 0, NotSerialized)  // _DEP: Dependencies
+            {
+                If (CondRefOf (\_SB.PMUD, Local6))
+                {
+                    Return (Package (0x02)
+                    {
+                        \_SB.PEPD, 
+                        \_SB.PMUD
+                    })
+                }
+
+                Return (Package (0x01)
+                {
+                    \_SB.PEPD
+                })
+            }
+        }
+
+        Device (SDM2)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If (^^TOOS)
+                {
+                    Return ("NVDA0212")
+                }
+
+                Return ("NVDA0112")
+            }
+
+            Name (_CID, "PNP0D40" /* SDA Standard Compliant SD Host Controller */)  // _CID: Compatible ID
+            Name (_UID, One)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = GCRS (0x78000200, 0x0200, 0x2F)
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    ConcatenateResTemplate (Local0, ^CRSA, Local1)
+                    Local0 = Local1
+                }
+
+                Return (Local0)
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^SD2E)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Method (_DEP, 0, NotSerialized)  // _DEP: Dependencies
+            {
+                If (CondRefOf (\_SB.PMUD, Local6))
+                {
+                    Return (Package (0x02)
+                    {
+                        \_SB.PEPD, 
+                        \_SB.PMUD
+                    })
+                }
+
+                Return (Package (0x01)
+                {
+                    \_SB.PEPD
+                })
+            }
+        }
+
+        Device (SDM3)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If (^^TOOS)
+                {
+                    Return ("NVDA0212")
+                }
+
+                Return ("NVDA0112")
+            }
+
+            Name (_CID, "PNP0D40" /* SDA Standard Compliant SD Host Controller */)  // _CID: Compatible ID
+            Name (_UID, 0x02)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = GCRS (0x78000400, 0x0200, 0x33)
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    ConcatenateResTemplate (Local0, ^CRSA, Local1)
+                    Local0 = Local1
+                }
+
+                Return (Local0)
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^SD3E)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Method (_DEP, 0, NotSerialized)  // _DEP: Dependencies
+            {
+                If (CondRefOf (\_SB.PMUD, Local6))
+                {
+                    Return (Package (0x02)
+                    {
+                        \_SB.PEPD, 
+                        \_SB.PMUD
+                    })
+                }
+
+                Return (Package (0x01)
+                {
+                    \_SB.PEPD
+                })
+            }
+        }
+
+        Device (SDM4)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                If (^^TOOS)
+                {
+                    Return ("NVDA0212")
+                }
+
+                Return ("NVDA0112")
+            }
+
+            Name (_CID, "PNP0D40" /* SDA Standard Compliant SD Host Controller */)  // _CID: Compatible ID
+            Name (_UID, 0x03)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = GCRS (0x78000600, 0x0200, 0x3F)
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    ConcatenateResTemplate (Local0, ^CRSA, Local1)
+                    Local0 = Local1
+                }
+
+                Return (Local0)
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^SD4E)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Method (_DIS, 0, NotSerialized)  // _DIS: Disable Device
+            {
+            }
+
+            Name (_DEP, Package (0x01)  // _DEP: Dependencies
+            {
+                \_SB.PEPD
+            })
+        }
+
+        Scope (SDM4)
+        {
+            Device (STOR)
+            {
+                Name (_ADR, 0x08)  // _ADR: Address
+                Method (_RMV, 0, NotSerialized)  // _RMV: Removal Status
+                {
+                    Return (Zero)
+                }
+
+                Method (_DIS, 0, NotSerialized)  // _DIS: Disable Device
+                {
+                }
+
+                Method (_STA, 0, NotSerialized)  // _STA: Status
+                {
+                    Return (0x0F)
+                }
+
+                Device (EMMC)
+                {
+                    Name (_ADR, 0x08)  // _ADR: Address
+                }
+            }
+        }
+
+        Device (AUDI)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0107")
+            }
+
+            Method (_DIS, 0, NotSerialized)  // _DIS: Disable Device
+            {
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local1 = CRS3 (0x70080000, 0x00010000, 0x87, One, 0x16)
+                ConcatenateResTemplate (Local1, CRSD (0x02, 0x18), Local0)
+                Local1 = Local0
+                ConcatenateResTemplate (Local1, CRSD (0x03, 0x1A), Local0)
+                Local1 = Local0
+                ConcatenateResTemplate (Local1, CRSD (0x04, 0x1C), Local0)
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    ConcatenateResTemplate (Local0, ^CRSA, Local1)
+                    Local0 = Local1
+                }
+
+                Return (Local0)
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^I2SE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Method (CHPD, 0, NotSerialized)
+            {
+                If (CondRefOf (^CRSA))
+                {
+                    Local0 = ^CRSA /* External reference */
+                    Local1 = SizeOf (Local0)
+                    Local1 -= 0x02
+                    Local2 = Zero
+                    While ((Local2 < Local1))
+                    {
+                        If ((DerefOf (Local0 [Local2]) == 0x8C))
+                        {
+                            If ((DerefOf (Local0 [(Local2 + 0x04)]) == Zero))
+                            {
+                                If ((DerefOf (Local0 [(Local2 + 0x15)]) >= 0x02))
+                                {
+                                    Local3 = DerefOf (Local0 [(Local2 + 0x14)])
+                                    Local3 <<= 0x08
+                                    Local3 += DerefOf (Local0 [(Local2 + 0x13)])
+                                    If ((DerefOf (Local0 [(Local2 + Local3)]) == One))
+                                    {
+                                        Local3++
+                                        If ((DerefOf (Local0 [(Local2 + Local3)]) == One))
+                                        {
+                                            Return (One)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Local4 = DerefOf (Local0 [(Local2 + 0x02)])
+                        Local4 <<= 0x08
+                        Local4 += DerefOf (Local0 [(Local2 + One)])
+                        Local4 += 0x03
+                        Local2 += Local4
+                    }
+                }
+
+                Return (Zero)
+            }
+
+            Method (ARMM, 0, NotSerialized)
+            {
+                Name (TBUF, Buffer (0x14){})
+                Local6 = Zero
+                If (CondRefOf (^CRSA))
+                {
+                    Local0 = ^CRSA /* External reference */
+                    Local1 = SizeOf (Local0)
+                    Local1 -= 0x02
+                    Local2 = Zero
+                    While ((Local2 < Local1))
+                    {
+                        If ((DerefOf (Local0 [Local2]) == 0x8E))
+                        {
+                            Local3 = DerefOf (Local0 [(Local2 + 0x0B)])
+                            Local3 <<= 0x08
+                            Local4 = (Local3 + DerefOf (Local0 [(Local2 + 0x0A)]))
+                            If ((DerefOf (Local0 [Local4]) != 0x5C))
+                            {
+                                TBUF [Local6] = DerefOf (Local0 [(Local2 + Local4)]
+                                    )
+                                Local6++
+                            }
+                        }
+                        ElseIf ((DerefOf (Local0 [Local2]) == 0x8C))
+                        {
+                            If ((DerefOf (Local0 [(Local2 + 0x15)]) >= One))
+                            {
+                                Local3 = DerefOf (Local0 [(Local2 + 0x14)])
+                                Local3 <<= 0x08
+                                Local4 = (Local3 + DerefOf (Local0 [(Local2 + 0x13)]))
+                                TBUF [Local6] = DerefOf (Local0 [(Local2 + Local4)]
+                                    )
+                                Local6++
+                            }
+                        }
+
+                        Local4 = DerefOf (Local0 [(Local2 + 0x02)])
+                        Local4 <<= 0x08
+                        Local4 += DerefOf (Local0 [(Local2 + One)])
+                        Local4 += 0x03
+                        Local2 += Local4
+                    }
+
+                    If (Local6)
+                    {
+                        Local0 = (Local6 + 0x02)
+                        Name (TPAK, Package (Local0){})
+                        TPAK [Zero] = One
+                        TPAK [One] = Local6
+                        Local0 = Zero
+                        While ((Local0 < Local6))
+                        {
+                            TPAK [(Local0 + 0x02)] = DerefOf (TBUF [Local0]
+                                )
+                            Local0++
+                        }
+
+                        Return (TPAK) /* \_SB_.AUDI.ARMM.TPAK */
+                    }
+                }
+
+                Return (0xC0000002)
+            }
+
+            Method (GGPK, 2, NotSerialized)
+            {
+                If (CondRefOf (Arg0))
+                {
+                    Local0 = Arg0
+                    Local1 = SizeOf (Local0)
+                    If ((Local1 > 0x02))
+                    {
+                        While (Local1)
+                        {
+                            Local1 -= 0x02
+                            If ((DerefOf (Local0 [Local1]) == Arg1))
+                            {
+                                Local1++
+                                Return (DerefOf (Local0 [Local1]))
+                            }
+                        }
+                    }
+                }
+
+                Return (0xC0000002)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If (CondRefOf (^DSM))
+                {
+                    ^DSM (Arg0, Arg1, Arg2, Arg3)
+                }
+                Else
+                {
+                    If ((Arg0 == ToUUID ("d14e4810-aca0-44fc-b10e-e37efac4c2b5")))
+                    {
+                        CreateByteField (Arg3, Zero, FARG)
+                        While (One)
+                        {
+                            Name (_T_0, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                            _T_0 = Arg2
+                            If ((_T_0 == Zero))
+                            {
+                                If ((Arg1 <= One))
+                                {
+                                    Local0 = 0x03B7
+                                    Local1 = ^GGPK (^ADP, (FARG + 0x30))
+                                    If ((ObjectType (Local1) == 0x03))
+                                    {
+                                        Local0 |= (One << 0x03)
+                                    }
+
+                                    Local1 = ^GGPK (^ADP, (FARG + 0x60))
+                                    If ((ObjectType (Local1) == 0x03))
+                                    {
+                                        Local0 |= (One << 0x06)
+                                    }
+
+                                    Return (Local0)
+                                }
+                                Else
+                                {
+                                    Return (0xC0000002)
+                                }
+                            }
+                            ElseIf ((_T_0 == One))
+                            {
+                                Local1 = ^GGPK (^ADP, (FARG + 0x10))
+                                If ((ObjectType (Local1) == 0x04))
+                                {
+                                    Return (Local1)
+                                }
+                                Else
+                                {
+                                    Name (PAKA, Package (0x08)
+                                    {
+                                        0x001F004D, 
+                                        0x03, 
+                                        Zero, 
+                                        One, 
+                                        One, 
+                                        0x40, 
+                                        0x08, 
+                                        Zero
+                                    })
+                                    PAKA [0x07] = ^CHPD ()
+                                    While (One)
+                                    {
+                                        Name (_T_1, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                        _T_1 = FARG /* \_SB_.AUDI._DSM.FARG */
+                                        If ((_T_1 == Zero))
+                                        {
+                                            Return (PAKA) /* \_SB_.AUDI._DSM.PAKA */
+                                        }
+                                        ElseIf ((_T_1 == One))
+                                        {
+                                            PAKA [0x05] = One
+                                            Return (PAKA) /* \_SB_.AUDI._DSM.PAKA */
+                                        }
+
+                                        Break
+                                    }
+                                }
+                            }
+                            ElseIf ((_T_0 == 0x02))
+                            {
+                                Return (^GGPK (^ADP, (FARG + 0x20)))
+                            }
+                            ElseIf ((_T_0 == 0x03))
+                            {
+                                Return (^GGPK (^ADP, (FARG + 0x30)))
+                            }
+                            ElseIf ((_T_0 == 0x04))
+                            {
+                                Return (^GGPK (^ADP, (FARG + 0x40)))
+                            }
+                            ElseIf ((_T_0 == 0x05))
+                            {
+                                Return (^GGPK (^ADP, (FARG + 0x50)))
+                            }
+                            ElseIf ((_T_0 == 0x06))
+                            {
+                                Return (^GGPK (^ADP, (FARG + 0x60)))
+                            }
+                            ElseIf ((_T_0 == 0x07))
+                            {
+                                While (One)
+                                {
+                                    Name (_T_2, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                    _T_2 = FARG /* \_SB_.AUDI._DSM.FARG */
+                                    If ((_T_2 == Zero))
+                                    {
+                                        Return (^ARMM ())
+                                    }
+
+                                    Break
+                                }
+                            }
+                            ElseIf ((_T_0 == 0x08))
+                            {
+                                While (One)
+                                {
+                                    Name (_T_3, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                    _T_3 = FARG /* \_SB_.AUDI._DSM.FARG */
+                                    If ((_T_3 == Zero))
+                                    {
+                                        Local1 = ^GGPK (^ADP, 0x1000)
+                                        Local2 = ^GGPK (^ADP, 0x1001)
+                                        If (((ObjectType (Local1) == 0x03) && (ObjectType (Local2) == 0x03)))
+                                        {
+                                            Return (Package (0x04)
+                                            {
+                                                Zero, 
+                                                0x03, 
+                                                "nvaenum\\nvawave&ds1nvoice", 
+                                                "NVIDIA Tegra Audio"
+                                            })
+                                        }
+                                        ElseIf ((ObjectType (Local1) == 0x03))
+                                        {
+                                            Return (Package (0x04)
+                                            {
+                                                Zero, 
+                                                One, 
+                                                "nvaenum\\nvawave&nvoice", 
+                                                "NVIDIA Tegra Audio"
+                                            })
+                                        }
+                                        ElseIf ((ObjectType (Local2) == 0x03))
+                                        {
+                                            Return (Package (0x04)
+                                            {
+                                                Zero, 
+                                                0x02, 
+                                                "nvaenum\\nvawave&ds1", 
+                                                "NVIDIA Tegra Audio"
+                                            })
+                                        }
+                                        Else
+                                        {
+                                            Return (Package (0x04)
+                                            {
+                                                Zero, 
+                                                Zero, 
+                                                "nvaenum\\nvawave", 
+                                                "NVIDIA Tegra Audio"
+                                            })
+                                        }
+                                    }
+                                    ElseIf ((_T_3 == One))
+                                    {
+                                        Return (^GGPK (^ADP, (FARG + 0x80)))
+                                    }
+
+                                    Break
+                                }
+                            }
+                            ElseIf ((_T_0 == 0x09))
+                            {
+                                While (One)
+                                {
+                                    Name (_T_4, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                    _T_4 = FARG /* \_SB_.AUDI._DSM.FARG */
+                                    If ((_T_4 == 0x07))
+                                    {
+                                        Return (Package (0x02)
+                                        {
+                                            One, 
+                                            One
+                                        })
+                                    }
+                                    ElseIf ((_T_4 == 0x08))
+                                    {
+                                        Return (Package (0x02)
+                                        {
+                                            One, 
+                                            0x02
+                                        })
+                                    }
+
+                                    Break
+                                }
+                            }
+                            Else
+                            {
+                                Return (0xC0000002)
+                            }
+
+                            Break
+                        }
+
+                        Return (0xC0000272)
+                    }
+                    ElseIf ((Arg0 == ToUUID ("ce20a880-90a0-43e0-a36a-11785a0c8e39")))
+                    {
+                        If ((Arg1 <= One))
+                        {
+                            While (One)
+                            {
+                                Name (_T_5, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                _T_5 = Arg2
+                                If ((_T_5 == Zero))
+                                {
+                                    Local1 = ^GGPK (^ADP, 0x1000)
+                                    If ((ObjectType (Local1) == 0x03))
+                                    {
+                                        Return (Buffer (One)
+                                        {
+                                             0x03                                             // .
+                                        })
+                                    }
+                                    Else
+                                    {
+                                        Return (Buffer (One)
+                                        {
+                                             0x01                                             // .
+                                        })
+                                    }
+                                }
+                                ElseIf ((_T_5 == One))
+                                {
+                                    Return (^GGPK (^ADP, 0x1000))
+                                }
+                                Else
+                                {
+                                    Return (0xC0000002)
+                                }
+
+                                Break
+                            }
+                        }
+
+                        Return (0xC0000272)
+                    }
+                    ElseIf ((Arg0 == ToUUID ("2d413344-0924-4f20-ad8c-c39cee3eee60")))
+                    {
+                        If ((Arg1 <= One))
+                        {
+                            While (One)
+                            {
+                                Name (_T_6, 0x00)  // _T_x: Emitted by ASL Compiler, x=0-9, A-Z
+                                _T_6 = Arg2
+                                If ((_T_6 == Zero))
+                                {
+                                    Local1 = ^GGPK (^ADP, 0x1001)
+                                    If ((ObjectType (Local1) == 0x03))
+                                    {
+                                        Return (Buffer (One)
+                                        {
+                                             0x03                                             // .
+                                        })
+                                    }
+                                    Else
+                                    {
+                                        Return (Buffer (One)
+                                        {
+                                             0x01                                             // .
+                                        })
+                                    }
+                                }
+                                ElseIf ((_T_6 == One))
+                                {
+                                    Return (^GGPK (^ADP, 0x1001))
+                                }
+                                Else
+                                {
+                                    Return (0xC0000002)
+                                }
+
+                                Break
+                            }
+                        }
+
+                        Return (0xC0000272)
+                    }
+
+                    Return (0xC0000002)
+                }
+            }
+        }
+
+        Device (HDAU)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA010F")
+            }
+
+            Name (_CLS, 0x0004000300000000)  // _CLS: Class Code
+            Method (_DIS, 0, NotSerialized)  // _DIS: Disable Device
+            {
+            }
+
+            OperationRegion (HDAR, SystemMemory, 0x70030000, 0x0200)
+            Field (HDAR, DWordAcc, NoLock, Preserve)
+            {
+                BA0L,   20, 
+                Offset (0x40), 
+                BA0S,   32, 
+                Offset (0x180), 
+                FPCI,   1
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = (BA0L * 0x1000)
+                Return (UCRS (^BA0S, Local0, 0x71, 0x02))
+            }
+
+            Name (STAF, Zero)
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If ((^STAF == 0xF0))
+                {
+                    Return (Zero)
+                }
+
+                If (^STAF)
+                {
+                    Return (0x0F)
+                }
+
+                If (!^^HDAE)
+                {
+                    ^STAF = One
+                    Return (0x0F)
+                }
+
+                Return (Zero)
+            }
+
+            Name (_S0W, 0x03)  // _S0W: S0 Device Wake State
+        }
+
+        Device (GPIO)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0008")
+            }
+
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Local0 = CRSG (0x6000D000, 0x80, 0x40)
+                ConcatenateResTemplate (Local0, CRSG (0x6000D100, 0x80, 0x41), Local1)
+                ConcatenateResTemplate (Local1, CRSG (0x6000D200, 0x80, 0x42), Local0)
+                ConcatenateResTemplate (Local0, CRSG (0x6000D300, 0x80, 0x43), Local1)
+                ConcatenateResTemplate (Local1, CRSG (0x6000D400, 0x80, 0x57), Local0)
+                ConcatenateResTemplate (Local0, CRSG (0x6000D500, 0x80, 0x77), Local1)
+                ConcatenateResTemplate (Local1, CRSG (0x6000D600, 0x80, 0x79), Local0)
+                ConcatenateResTemplate (Local0, CRSG (0x6000D700, 0x80, 0x9D), Local1)
+                Return (Local1)
+            }
+
+            Name (AVBL, Zero)
+            Method (_REG, 2, NotSerialized)  // _REG: Region Availability
+            {
+                If ((Arg0 == 0x08))
+                {
+                    AVBL = Arg1
+                }
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("4f248f40-d5e2-499f-834c-27758ea1cd3f") /* GPIO Controller */))
+                {
+                    If ((Arg2 == Zero))
+                    {
+                        If ((Arg1 == Zero))
+                        {
+                            If (CondRefOf (^GPK, Local6))
+                            {
+                                Return (Buffer (One)
+                                {
+                                     0x03                                             // .
+                                })
+                            }
+                            Else
+                            {
+                                Return (Buffer (One)
+                                {
+                                     0x01                                             // .
+                                })
+                            }
+                        }
+                    }
+
+                    If ((Arg2 == One))
+                    {
+                        Return (^GPK) /* External reference */
+                    }
+                }
+
+                Return (Buffer (One)
+                {
+                     0x00                                             // .
+                })
+            }
+        }
+
+        Device (PMSD)
+        {
+            Method (_HID, 0, NotSerialized)  // _HID: Hardware ID
+            {
+                Return ("NVDA0106")
+            }
+
+            Method (_STA, 0, NotSerialized)  // _STA: Status
+            {
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    Return (0x0F)
+                }
+                Else
+                {
+                    Return (Zero)
+                }
+            }
+
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                If (CondRefOf (^CRSA, Local7))
+                {
+                    Return (^CRSA) /* External reference */
+                }
+            }
+        }
+
+        Device (THEM)
+        {
+            Name (_HID, "NVDAF300")  // _HID: Hardware ID
+            Name (_UID, Zero)  // _UID: Unique ID
+            Method (_CRS, 0, NotSerialized)  // _CRS: Current Resource Settings
+            {
+                Name (CRSB, ResourceTemplate ()
+                {
+                    Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive, ,, )
+                    {
+                        0x00000050,
+                    }
+                    Memory32Fixed (ReadWrite,
+                        0x700E2000,         // Address Base
+                        0x00001000,         // Address Length
+                        )
+                })
+                If (CondRefOf (^CRSA))
+                {
+                    ConcatenateResTemplate (^CRSA, CRSB, Local0)
+                }
+
+                Return (Local0)
+            }
+
+            Method (_DSM, 4, NotSerialized)  // _DSM: Device-Specific Method
+            {
+                If ((Arg0 == ToUUID ("6036f458-310e-4990-b1ef-34a60b72d89d")))
+                {
+                    If ((Arg1 == 0x02))
+                    {
+                        If ((Arg2 == Zero))
+                        {
+                            Local0 = Zero
+                            Local0 |= (One << Zero)
+                            Local0 |= (One << 0x03)
+                            If (CondRefOf (^GPDD))
+                            {
+                                Local0 |= (One << One)
+                            }
+
+                            If (CondRefOf (^GTZD))
+                            {
+                                Local0 |= (One << 0x02)
+                            }
+
+                            Return (Local0)
+                        }
+
+                        If ((Arg2 == One))
+                        {
+                            Return (^GPDD) /* External reference */
+                        }
+
+                        If ((Arg2 == 0x02))
+                        {
+                            Return (^GTZD) /* External reference */
+                        }
+
+                        If ((Arg2 == 0x03))
+                        {
+                            Name (CALB, Package (0x0A)
+                            {
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero, 
+                                Zero
+                            })
+                            CALB [One] = RDR (0x7000F800, 0x018C)
+                            CALB [0x02] = RDR (0x7000F800, 0x0198)
+                            CALB [0x03] = RDR (0x7000F800, 0x0184)
+                            CALB [0x04] = RDR (0x7000F800, 0x0188)
+                            CALB [0x05] = RDR (0x7000F800, 0x022C)
+                            CALB [0x06] = RDR (0x7000F800, 0x0254)
+                            CALB [0x07] = RDR (0x7000F800, 0x0258)
+                            CALB [0x08] = RDR (0x7000F800, 0x025C)
+                            CALB [0x09] = RDR (0x7000F800, 0x0260)
+                            Return (CALB) /* \_SB_.THEM._DSM.CALB */
+                        }
+                    }
+                }
+                Else
+                {
+                    Return (Buffer (One)
+                    {
+                         0x00                                             // .
+                    })
+                }
+            }
+        }
+
+        Device (DWMI)
+        {
+            Name (_HID, EisaId ("PNP0C14") /* Windows Management Instrumentation Device */)  // _HID: Hardware ID
+            Name (_UID, Zero)  // _UID: Unique ID
+            Name (_WDG, Buffer (0x14)
+            {
+                /* 0000 */  0x80, 0xE0, 0x7F, 0x99, 0x66, 0xD4, 0x2A, 0x43,  // ....f.*C
+                /* 0008 */  0xA7, 0xBB, 0x24, 0xC6, 0x93, 0x2C, 0x83, 0x60,  // ..$..,.`
+                /* 0010 */  0x30, 0x30, 0x01, 0x01                           // 00..
+            })
+            Method (WQ00, 0, NotSerialized)
+            {
+                Return (\_SB.BPBT)
+            }
+        }
+    }
+}
+
