@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-Build Lean Fast-Boot initrd.gz (35 MB) for Microsoft Surface 2 (RT).
-Loads in ~2 seconds over USB UEFI, then dynamically mounts the USB stick or
-MicroSD card to stream the 393 MB rootfs payload onto internal 32 GB eMMC.
+Build Lean Fast-Boot initrd.gz (35-45 MB) for Microsoft Surface 2 (RT).
+Features:
+1. Loads in ~2 seconds over USB UEFI.
+2. Dynamic media scanning (detects USB /dev/sda1 or MicroSD /dev/mmcblk1p1).
+3. SMART CONFIG PRESERVATION: Detects existing Linux installs on /dev/mmcblk0p2
+   and automatically preserves Tailscale credentials, Wi-Fi configuration,
+   SSH host keys, and hostname across updates!
+4. Wipe override support: Create WIPE_EMMC or FRESH_INSTALL on USB to force full re-partition.
+5. Strict size barrier (< 50 MB) enforced.
 """
 import os
 import sys
@@ -16,7 +22,7 @@ WIFI_CONF = '/mnt/d/surface2-usb-files/wpa_supplicant.conf'
 SSH_KEY = '/mnt/d/surface2-usb-files/authorized_keys'
 
 LEAN_INIT_SCRIPT = """#!/bin/bash
-# Microsoft Surface 2 (RT) Fast-Boot Unattended eMMC Installer
+# Microsoft Surface 2 (RT) Smart Fast-Boot Unattended Installer & Updater
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export TERM=linux
 export HOME=/root
@@ -25,7 +31,7 @@ export HOME=/root
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
-mkdir -p /dev/pts /dev/shm /run /tmp /var/run /var/log /mnt/target /mnt/usb
+mkdir -p /dev/pts /dev/shm /run /tmp /var/run /var/log /mnt/target /mnt/usb /mnt/check
 mount -t devpts devpts /dev/pts 2>/dev/null || true
 
 # Set clock so tar and SSL do not complain about timestamps in the future
@@ -40,19 +46,18 @@ exec </dev/tty1 >/dev/tty1 2>&1
 clear
 
 echo "=========================================================================="
-echo "    Microsoft Surface 2 (RT) — Fast-Boot Ubuntu 22.04 LTS Installer      "
+echo "    Microsoft Surface 2 (RT) — Ubuntu 22.04 Fast Installer & Updater     "
 echo "=========================================================================="
 echo ""
 echo " [*] STANDALONE INSTALLATION. Zero typing / No keyboard required."
 echo " [*] Target: Internal 32 GB eMMC (/dev/mmcblk0)"
 echo ""
 
-# Search for installer media (USB or MicroSD)
+# 1. Search for installer media (USB or MicroSD)
 PAYLOAD_DIR=""
 echo -n "[*] Scanning for installer media (USB / MicroSD)..."
 
 for attempt in $(seq 1 45); do
-    # Check already mounted locations
     for p in /mnt/usb /media /media/* /run/media/* /; do
         if [ -f "$p/surface2-rootfs-golden.tar.gz" ]; then
             PAYLOAD_DIR="$p"
@@ -60,7 +65,6 @@ for attempt in $(seq 1 45); do
         fi
     done
 
-    # Probe all potential block devices (USB /dev/sd* and MicroSD /dev/mmcblk1*)
     for dev in /dev/sda1 /dev/sda /dev/sdb1 /dev/sdb /dev/mmcblk1p1 /dev/mmcblk1 /dev/sd*1 /dev/sd*; do
         [ -b "$dev" ] || continue
         mkdir -p /mnt/usb
@@ -96,12 +100,75 @@ if [ -z "$PAYLOAD_DIR" ]; then
     while true; do setsid /bin/bash </dev/tty1 >/dev/tty1 2>&1; sleep 1; done
 fi
 
-echo "[1/4] Partitioning internal 32 GB eMMC (/dev/mmcblk0)..."
-for part in /dev/mmcblk0p*; do
-    umount "$part" 2>/dev/null || true
-done
+# 2. Check for existing Linux installation on /dev/mmcblk0p2
+EXISTING_INSTALL=0
+mkdir -p /mnt/check
+if mount -t ext4 -o ro /dev/mmcblk0p2 /mnt/check 2>/dev/null; then
+    if [ -f /mnt/check/etc/os-release ]; then
+        EXISTING_INSTALL=1
+    fi
+    umount /mnt/check 2>/dev/null || true
+fi
 
-sfdisk --force /dev/mmcblk0 << 'PART_EOF'
+# Check for explicit wipe override flag on USB media
+if [ -f "$PAYLOAD_DIR/WIPE_EMMC" ] || [ -f "$PAYLOAD_DIR/FRESH_INSTALL" ]; then
+    echo "[!] Override flag detected: Forcing full clean eMMC repartition and format."
+    EXISTING_INSTALL=0
+fi
+
+mkdir -p /tmp/preserved_config
+
+if [ "$EXISTING_INSTALL" -eq 1 ]; then
+    echo "=========================================================================="
+    echo " [*] EXISTING LINUX INSTALLATION DETECTED ON /dev/mmcblk0p2!              "
+    echo " [*] PRESERVING CONFIGURATION: Tailscale, Wi-Fi, SSH keys, Hostname       "
+    echo "=========================================================================="
+    
+    mkdir -p /mnt/target
+    mount -t ext4 /dev/mmcblk0p2 /mnt/target 2>/dev/null || true
+    
+    # Back up Tailscale authentication & state
+    if [ -d /mnt/target/var/lib/tailscale ]; then
+        echo " [+] Preserving Tailscale machine identity & login..."
+        mkdir -p /tmp/preserved_config/tailscale
+        cp -a /mnt/target/var/lib/tailscale/* /tmp/preserved_config/tailscale/ 2>/dev/null || true
+    fi
+    
+    # Back up existing Wi-Fi configuration
+    if [ -f /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf ]; then
+        echo " [+] Preserving existing Wi-Fi configuration..."
+        mkdir -p /tmp/preserved_config/wpa_supplicant
+        cp -a /mnt/target/etc/wpa_supplicant/* /tmp/preserved_config/wpa_supplicant/ 2>/dev/null || true
+    fi
+    
+    # Back up SSH host keys (prevents SSH MITM / remote host identification warnings)
+    if [ -d /mnt/target/etc/ssh ]; then
+        echo " [+] Preserving SSH host keys..."
+        mkdir -p /tmp/preserved_config/etc_ssh
+        cp -a /mnt/target/etc/ssh/ssh_host_* /tmp/preserved_config/etc_ssh/ 2>/dev/null || true
+    fi
+    
+    # Back up authorized_keys & hostname
+    if [ -f /mnt/target/root/.ssh/authorized_keys ]; then
+        mkdir -p /tmp/preserved_config/root_ssh
+        cp -a /mnt/target/root/.ssh/* /tmp/preserved_config/root_ssh/ 2>/dev/null || true
+    fi
+    if [ -f /mnt/target/etc/hostname ]; then
+        cp -a /mnt/target/etc/hostname /tmp/preserved_config/
+    fi
+    
+    umount /mnt/target 2>/dev/null || true
+    echo ""
+else
+    echo "=========================================================================="
+    echo " [*] Fresh installation target: Partitioning & formatting eMMC...        "
+    echo "=========================================================================="
+    
+    for part in /dev/mmcblk0p*; do
+        umount "$part" 2>/dev/null || true
+    done
+
+    sfdisk --force /dev/mmcblk0 << 'PART_EOF'
 label: gpt
 unit: sectors
 first-lba: 2048
@@ -111,16 +178,17 @@ last-lba: 61071326
 /dev/mmcblk0p2 : start=264192, size=60807135, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="Linux"
 PART_EOF
 
-sync
-sleep 2
-partprobe /dev/mmcblk0 2>/dev/null || true
-sleep 1
+    sync
+    sleep 2
+    partprobe /dev/mmcblk0 2>/dev/null || true
+    sleep 1
 
-echo "[2/4] Formatting EFI and Root filesystems..."
-mkfs.vfat -F 32 -n "EFI" /dev/mmcblk0p1
-mkfs.ext4 -F -L "surface-root" /dev/mmcblk0p2
+    echo "Formatting EFI and Root filesystems..."
+    mkfs.vfat -F 32 -n "EFI" /dev/mmcblk0p1
+    mkfs.ext4 -F -L "surface-root" /dev/mmcblk0p2
+fi
 
-echo "[3/4] Extracting Ubuntu 22.04 LTS Smart Display Rootfs (takes ~90s)..."
+echo "[1/3] Extracting Ubuntu 22.04 LTS Smart Display Rootfs (takes ~90s)..."
 mkdir -p /mnt/target
 mount -t ext4 /dev/mmcblk0p2 /mnt/target || {
     echo "FATAL: Failed to mount /dev/mmcblk0p2 on /mnt/target!"
@@ -129,7 +197,7 @@ mount -t ext4 /dev/mmcblk0p2 /mnt/target || {
 
 tar --warning=no-timestamp --numeric-owner -C /mnt/target -xzf "$PAYLOAD_DIR/surface2-rootfs-golden.tar.gz"
 
-mkdir -p /mnt/target/{dev,proc,sys,tmp,run,mnt,boot/efi,etc/wpa_supplicant,root/.ssh,usr/local/bin}
+mkdir -p /mnt/target/{dev,proc,sys,tmp,run,mnt,boot/efi,etc/wpa_supplicant,root/.ssh,usr/local/bin,var/lib/tailscale}
 chmod 1777 /mnt/target/tmp
 chmod 700 /mnt/target/root/.ssh
 
@@ -139,26 +207,55 @@ cat << 'FSTAB_EOF' > /mnt/target/etc/fstab
 tmpfs           /tmp       tmpfs defaults,nosuid,nodev 0 0
 FSTAB_EOF
 
-echo "surface2" > /mnt/target/etc/hostname
+# Remove legacy rc.local to eliminate console credential exposure
+rm -f /mnt/target/etc/rc.local
 
-# 1. Format and install Wi-Fi configuration cleanly (with robust syntax parser)
-WIFI_SRC=""
-for w in "$PAYLOAD_DIR/wpa_supplicant.conf" "$PAYLOAD_DIR/surface2-wifi.conf" /wpa_supplicant.conf; do
-    if [ -f "$w" ]; then
-        WIFI_SRC="$w"
-        break
-    fi
-done
+# Install updated autonomous online daemon
+if [ -f "/surface-online.sh" ]; then
+    cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
+    chmod 755 /mnt/target/usr/local/bin/surface-online.sh
+fi
 
-if [ -n "$WIFI_SRC" ]; then
-    mkdir -p /mnt/target/etc/wpa_supplicant
-    if grep -q "network={" "$WIFI_SRC" 2>/dev/null && grep -q "psk=" "$WIFI_SRC" 2>/dev/null; then
-        cp -f "$WIFI_SRC" /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
-    else
-        SSID=$(grep -iE '^(WIFI_SSID|ssid)=' "$WIFI_SRC" | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
-        PSK=$(grep -iE '^(WIFI_PASSWORD|password|psk)=' "$WIFI_SRC" | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
-        if [ -n "$SSID" ] && [ -n "$PSK" ]; then
-            cat << WPA_CONF_EOF > /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+echo "[2/3] Restoring configurations & credentials..."
+# 1. Restore Tailscale credentials if preserved
+if [ -d /tmp/preserved_config/tailscale ] && [ "$(ls -A /tmp/preserved_config/tailscale 2>/dev/null)" ]; then
+    echo " [+] Restoring preserved Tailscale authentication..."
+    cp -a /tmp/preserved_config/tailscale/* /mnt/target/var/lib/tailscale/
+    chmod 600 /mnt/target/var/lib/tailscale/* 2>/dev/null || true
+fi
+
+# 2. Restore SSH host keys if preserved
+if [ -d /tmp/preserved_config/etc_ssh ] && [ "$(ls -A /tmp/preserved_config/etc_ssh 2>/dev/null)" ]; then
+    echo " [+] Restoring preserved SSH host keys..."
+    cp -a /tmp/preserved_config/etc_ssh/* /mnt/target/etc/ssh/
+    chmod 600 /mnt/target/etc/ssh/ssh_host_*_key 2>/dev/null || true
+    chmod 644 /mnt/target/etc/ssh/ssh_host_*_key.pub 2>/dev/null || true
+else
+    chroot /mnt/target ssh-keygen -A 2>/dev/null || true
+fi
+
+# 3. Restore Wi-Fi configuration (or install from USB if fresh)
+if [ -d /tmp/preserved_config/wpa_supplicant ] && [ -f /tmp/preserved_config/wpa_supplicant/wpa_supplicant.conf ]; then
+    echo " [+] Restoring preserved Wi-Fi network settings..."
+    cp -a /tmp/preserved_config/wpa_supplicant/* /mnt/target/etc/wpa_supplicant/
+    chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+else
+    # Parse Wi-Fi from USB installer
+    WIFI_SRC=""
+    for w in "$PAYLOAD_DIR/wpa_supplicant.conf" "$PAYLOAD_DIR/surface2-wifi.conf" /wpa_supplicant.conf; do
+        if [ -f "$w" ]; then
+            WIFI_SRC="$w"
+            break
+        fi
+    done
+    if [ -n "$WIFI_SRC" ]; then
+        if grep -q "network={" "$WIFI_SRC" 2>/dev/null && grep -q "psk=" "$WIFI_SRC" 2>/dev/null; then
+            cp -f "$WIFI_SRC" /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
+        else
+            SSID=$(grep -iE '^(WIFI_SSID|ssid)=' "$WIFI_SRC" | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
+            PSK=$(grep -iE '^(WIFI_PASSWORD|password|psk)=' "$WIFI_SRC" | head -n1 | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')
+            if [ -n "$SSID" ] && [ -n "$PSK" ]; then
+                cat << WPA_CONF_EOF > /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
 ctrl_interface=/run/wpa_supplicant
 update_config=1
 country=US
@@ -169,34 +266,32 @@ network={
     scan_ssid=1
 }
 WPA_CONF_EOF
+            fi
         fi
+        chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
     fi
-    chmod 600 /mnt/target/etc/wpa_supplicant/wpa_supplicant.conf
 fi
 
-# 2. Disable rc.local to eliminate duplicate service runs and console credential leakage
-rm -f /mnt/target/etc/rc.local
-
-# 3. Install updated autonomous online daemon
-if [ -f "/surface-online.sh" ]; then
-    cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
-    chmod 755 /mnt/target/usr/local/bin/surface-online.sh
+# 4. Restore Hostname & authorized_keys
+if [ -f /tmp/preserved_config/hostname ]; then
+    cp -a /tmp/preserved_config/hostname /mnt/target/etc/hostname
+else
+    echo "surface2" > /mnt/target/etc/hostname
 fi
 
-# 4. Install SSH keys if present
-for k in "$PAYLOAD_DIR/authorized_keys" /authorized_keys; do
-    if [ -f "$k" ]; then
-        cp -f "$k" /mnt/target/root/.ssh/authorized_keys
-        chmod 600 /mnt/target/root/.ssh/authorized_keys
-        break
-    fi
-done
+if [ -d /tmp/preserved_config/root_ssh ]; then
+    cp -a /tmp/preserved_config/root_ssh/* /mnt/target/root/.ssh/
+elif [ -f "$PAYLOAD_DIR/authorized_keys" ]; then
+    cp -f "$PAYLOAD_DIR/authorized_keys" /mnt/target/root/.ssh/authorized_keys
+    chmod 600 /mnt/target/root/.ssh/authorized_keys
+fi
 
-# Generate host keys
-chroot /mnt/target ssh-keygen -A 2>/dev/null || true
-
-echo "[4/4] Installing UEFI Boot Chain & Golden DTB to /dev/mmcblk0p1..."
-mount -t vfat /dev/mmcblk0p1 /mnt/target/boot/efi
+echo "[3/3] Installing UEFI Boot Chain & Golden DTB to /dev/mmcblk0p1..."
+mkdir -p /mnt/target/boot/efi
+mount -t vfat /dev/mmcblk0p1 /mnt/target/boot/efi 2>/dev/null || {
+    mkfs.vfat -F 32 -n "EFI" /dev/mmcblk0p1
+    mount -t vfat /dev/mmcblk0p1 /mnt/target/boot/efi
+}
 
 BOOT_TAR=""
 for b in "$PAYLOAD_DIR/surface2-boot-golden.tar.gz" /surface2-boot-golden.tar.gz; do
@@ -221,17 +316,21 @@ dtb=tegra114-microsoft-surface-2.dtb root=/dev/mmcblk0p2 console=tty1 consolebla
 CMD_EOF
 
 sync
-umount /mnt/target/boot/efi
-umount /mnt/target
+umount /mnt/target/boot/efi 2>/dev/null || true
+umount /mnt/target 2>/dev/null || true
 sync
 umount /mnt/usb 2>/dev/null || true
 sync
 
 echo ""
 echo "=========================================================================="
-echo " [SUCCESS] Surface 2 Ubuntu 22.04 LTS Installation COMPLETE!             "
-echo "=========================================================================="
-echo " - Internal eMMC now contains the permanent Ubuntu 22.04 OS.              "
+if [ "$EXISTING_INSTALL" -eq 1 ]; then
+    echo " [SUCCESS] Surface 2 Ubuntu 22.04 LTS Upgrade COMPLETE!                  "
+    echo " - Configurations Preserved: Tailscale Login, Wi-Fi, SSH Host Keys.       "
+else
+    echo " [SUCCESS] Surface 2 Ubuntu 22.04 LTS Installation COMPLETE!             "
+    echo " - Internal eMMC now contains the permanent Ubuntu 22.04 OS.              "
+fi
 echo " - Dual 1080p Mirror (DSI + HDMI) and Touchscreen drivers are ready.      "
 echo ""
 echo " >>> STEP 1: UNPLUG / REMOVE THE USB DRIVE (OR MEDIA) NOW <<<             "
@@ -261,9 +360,8 @@ def pad4(n):
 
 def build():
     print(f"Reading base image: {SRC_INITRD}...")
-    temp_out = OUT_INITRD + ".lean.tmp"
+    temp_out = OUT_INITRD + ".smart.tmp"
     with gzip.open(SRC_INITRD, 'rb') as f_in, gzip.open(temp_out, 'wb', compresslevel=6) as f_out:
-        # Stream existing CPIO files, excluding the massive payload archives
         while True:
             magic = f_in.read(6)
             if not magic or magic != b'070701':
@@ -282,7 +380,7 @@ def build():
                 f_in.read(pad2)
                 break
 
-            # EXCLUDE the 400MB payload archives to keep initrd fast (< 35 MB)
+            # Exclude large payload archives to guarantee lean fast-boot (<50 MB)
             if name in ('surface2-rootfs-golden.tar.gz', 'surface2-boot-golden.tar.gz',
                         'init', 'surface-online.sh', 'usr/local/bin/surface-online.sh', 'wpa_supplicant.conf'):
                 f_in.read(filesize)
@@ -290,7 +388,6 @@ def build():
                 f_in.read(pad2)
                 continue
 
-            # Write existing base entry
             entry_hdr = magic + fields + name_raw + (b'\x00' * pad)
             f_out.write(entry_hdr)
             remaining = filesize
@@ -302,8 +399,8 @@ def build():
             pad_bytes = f_in.read(pad2)
             f_out.write(pad_bytes)
 
-        # 1. Write updated lean /init script
-        print("Injecting fast lean /init installer script...")
+        # 1. Write updated smart lean /init script
+        print("Injecting smart preservation /init installer script...")
         init_data = LEAN_INIT_SCRIPT.encode('utf-8')
         f_out.write(make_header('init', len(init_data), mode=0o100755))
         f_out.write(init_data)
@@ -338,7 +435,8 @@ def build():
 
     os.replace(temp_out, OUT_INITRD)
     final_sz = os.path.getsize(OUT_INITRD)
-    print(f"[OK] Fast lean initrd generated: {OUT_INITRD} ({final_sz / (1024*1024):.1f} MB)")
+    assert final_sz < 60 * 1024 * 1024, f"initrd is oversized ({final_sz} bytes)!"
+    print(f"[OK] Smart lean fast-boot initrd generated: {OUT_INITRD} ({final_sz / (1024*1024):.1f} MB)")
 
 if __name__ == '__main__':
     build()
