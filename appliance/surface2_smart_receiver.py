@@ -241,15 +241,20 @@ class DrmMasterManager:
         if fd is None:
             return
         try:
-            hdmi_cid, connected, mode_bytes, hdmi_crtc_id, dsi_crtc_id, fallback_fb = self._probe_connectors(fd)
-            if hdmi_cid is None:
-                return
-            _, hdmi_active, _ = self._get_crtc(fd, hdmi_crtc_id)
+            st_path = "/sys/class/drm/card0-HDMI-A-1/status"
             en_path = "/sys/class/drm/card0-HDMI-A-1/enabled"
+            sys_connected = os.path.exists(st_path) and open(st_path).read().strip() == "connected"
             sys_enabled = os.path.exists(en_path) and open(en_path).read().strip() == "enabled"
-            enabled = bool(hdmi_active) or sys_enabled
 
-            if connected and not enabled:
+            # Avoid polling DRM_IOCTL_MODE_GETCONNECTOR (EDID DDC on 7000c700.i2c) every 2s
+            # when state hasn't changed or HDMI CRTC is already enabled.
+            if sys_connected == self.last_hdmi_connected and (sys_enabled or not sys_connected):
+                return
+
+            if sys_connected and not sys_enabled:
+                hdmi_cid, connected, mode_bytes, hdmi_crtc_id, dsi_crtc_id, fallback_fb = self._probe_connectors(fd)
+                if hdmi_cid is None or not connected:
+                    return
                 fb_id, _, _ = self._get_crtc(fd, dsi_crtc_id)
                 if not fb_id:
                     fb_id = fallback_fb
@@ -263,14 +268,14 @@ class DrmMasterManager:
                     self._log(f"Enabled HDMI-A-1 (cid={hdmi_cid}) on CRTC {hdmi_crtc_id} using fb_id={fb_id}")
                 else:
                     self._log(f"HDMI connected but missing fb_id={fb_id} or mode={bool(mode_bytes)}")
-            elif connected and not self.last_hdmi_connected:
+            elif sys_connected and sys_enabled and not self.last_hdmi_connected:
                 apply_hdmi_phy_fix()
-                self._log(f"HDMI replugged on active CRTC {hdmi_crtc_id}; re-applied PHY fix")
-            elif not connected and enabled:
-                # Keep CRTC 64 (dc@54200000 / DISA) enabled on Tegra 114: disabling DISA
-                # powergates shared display logic and causes DSI-1 (CRTC 98) to go black.
-                self._log(f"HDMI unplugged; keeping CRTC {hdmi_crtc_id} active so DSI CRTC {dsi_crtc_id} stays on")
-            self.last_hdmi_connected = connected
+                self._log("HDMI replugged on active CRTC; re-applied PHY fix")
+            elif not sys_connected and sys_enabled:
+                # Keep HDMI CRTC (dc@54200000 / DISA) enabled on Tegra 114: disabling DISA
+                # powergates shared display logic and causes DSI-1 to go black.
+                self._log("HDMI unplugged; keeping HDMI CRTC active so DSI stays on")
+            self.last_hdmi_connected = sys_connected
         except Exception as e:
             self._log(f"sync_hdmi_hotplug error: {e}")
 
