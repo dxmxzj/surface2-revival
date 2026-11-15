@@ -5,7 +5,7 @@ After=network.target avahi-daemon.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/uxplay -n Surface2 -nh -vs waylandsink
+ExecStart=/usr/bin/uxplay -n Surface2 -nh -vs fakesink
 Restart=always
 RestartSec=5
 
