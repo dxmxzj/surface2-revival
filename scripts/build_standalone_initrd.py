@@ -208,6 +208,12 @@ IdleAction=ignore
 LID_EOF
 chroot /mnt/target systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target 2>/dev/null || true
 
+mkdir -p /mnt/target/etc/systemd/system.conf.d
+cat << 'STOP_EOF' > /mnt/target/etc/systemd/system.conf.d/fast-shutdown.conf
+[Manager]
+DefaultTimeoutStopSec=5s
+STOP_EOF
+
 # 4. Install updated autonomous online daemon & smart receiver
 if [ -f "/surface-online.sh" ]; then
     cp -f "/surface-online.sh" /mnt/target/usr/local/bin/surface-online.sh
