@@ -128,11 +128,13 @@ while true; do
         /usr/sbin/sshd 2>/dev/null || dropbear -R -E -p 22 2>/dev/null || true
     fi
 
-    # 6. Periodic heartbeat beacon
-    IP=$(ip -4 addr show "${IFACE:-mlan0}" 2>/dev/null | grep -oE "inet [0-9.]+" | awk '{print $2}')
-    if [ -n "$IP" ]; then
-        ping -c 1 -W 1 192.168.86.49 >/dev/null 2>&1 || true
-        echo "SURFACE2_ONLINE IFACE=$IFACE IP=$IP ROOT=$(findmnt -n -o SOURCE / 2>/dev/null) $(uptime)" > /dev/tcp/192.168.86.49/9999 2>/dev/null || true
+    # 6. Optional heartbeat beacon (disabled unless SURFACE_BEACON_HOST is set)
+    if [ -n "${SURFACE_BEACON_HOST:-}" ]; then
+        IP=$(ip -4 addr show "${IFACE:-mlan0}" 2>/dev/null | grep -oE "inet [0-9.]+" | awk '{print $2}')
+        if [ -n "$IP" ]; then
+            ping -c 1 -W 1 "$SURFACE_BEACON_HOST" >/dev/null 2>&1 || true
+            echo "SURFACE2_ONLINE IFACE=$IFACE IP=$IP ROOT=$(findmnt -n -o SOURCE / 2>/dev/null) $(uptime)" > "/dev/tcp/$SURFACE_BEACON_HOST/${SURFACE_BEACON_PORT:-9999}" 2>/dev/null || true
+        fi
     fi
 
     sleep 5
