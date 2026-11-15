@@ -1034,6 +1034,11 @@ def main():
     signal.signal(signal.SIGINT, handle_sigterm)
 
     print("[SmartReceiver] Initializing Surface 2 Dual-Display Dashboard...", flush=True)
+    try:
+        with open("/proc/sys/kernel/printk", "w") as f:
+            f.write("1 4 1 7\n")
+    except Exception:
+        pass
     drm_manager.acquire()
     drm_manager.sync_hdmi_hotplug()
     receiver.show_dashboard("Ready to receive streams")
