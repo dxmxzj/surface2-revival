@@ -209,8 +209,9 @@ class DrmMasterManager:
             if resolved:
                 hdmi_crtc_id = resolved
 
-            if hdmi_connected and count_modes > 0:
+            if hdmi_connected:
                 best_score = -1
+                has_1080p = False
                 for i in range(count_modes):
                     m = modes_buf.raw[i * 68 : (i + 1) * 68]
                     hdisp = struct.unpack_from("<H", m, 4)[0]
@@ -220,20 +221,22 @@ class DrmMasterManager:
                     preferred = (mtype & 0x08) != 0
                     score = 0
                     if hdisp == 1920 and vdisp == 1080 and not interlaced:
+                        has_1080p = True
                         score += 100 + (20 if vrefresh == 60 else 0)
                     if preferred and not interlaced:
                         score += 10
                     if score > best_score:
                         best_score = score
                         chosen_mode = m
-            elif hdmi_connected and count_modes == 0:
-                chosen_mode = struct.pack(
-                    "<IHHHHHHHHHHIII32s",
-                    148500,
-                    1920, 2008, 2052, 2200, 0,
-                    1080, 1084, 1089, 1125, 0,
-                    60, 0x5, 0x40, b"1920x1080"
-                )
+                if not has_1080p:
+                    # EDID/DDC failed (kernel fallback 1024x768) or 0 modes: force standard 1920x1080@60 CEA mode
+                    chosen_mode = struct.pack(
+                        "<IHHHHHHHHHHIII32s",
+                        148500,
+                        1920, 2008, 2052, 2200, 0,
+                        1080, 1084, 1089, 1125, 0,
+                        60, 0x5, 0x40, b"1920x1080"
+                    )
         return hdmi_cid, hdmi_connected, chosen_mode, hdmi_crtc_id, dsi_crtc_id, fallback_fb
 
     def sync_hdmi_hotplug(self):
@@ -269,6 +272,21 @@ class DrmMasterManager:
                 else:
                     self._log(f"HDMI connected but missing fb_id={fb_id} or mode={bool(mode_bytes)}")
             elif sys_connected and sys_enabled and not self.last_hdmi_connected:
+                hdmi_cid, _, mode_bytes, hdmi_crtc_id, dsi_crtc_id, fallback_fb = self._probe_connectors(fd)
+                _, _, cur_mode = self._get_crtc(fd, hdmi_crtc_id)
+                cur_h = struct.unpack_from("<H", cur_mode, 4)[0] if len(cur_mode) >= 16 else 0
+                cur_v = struct.unpack_from("<H", cur_mode, 14)[0] if len(cur_mode) >= 16 else 0
+                if (cur_h, cur_v) != (1920, 1080) and hdmi_cid and mode_bytes:
+                    fb_id, _, _ = self._get_crtc(fd, dsi_crtc_id)
+                    if not fb_id:
+                        fb_id = fallback_fb
+                    if fb_id:
+                        conn_arr = (ctypes.c_uint32 * 1)(hdmi_cid)
+                        sc = bytearray(0x68)
+                        struct.pack_into("<QIIIIIIIII", sc, 0, ctypes.addressof(conn_arr), 1, hdmi_crtc_id, fb_id, 0, 0, 0, 1, 0, 0)
+                        sc[36:104] = mode_bytes
+                        fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
+                        self._log(f"Upgraded HDMI CRTC {hdmi_crtc_id} from {cur_h}x{cur_v} to 1920x1080")
                 apply_hdmi_phy_fix()
                 self._log("HDMI replugged on active CRTC; re-applied PHY fix")
             elif not sys_connected and sys_enabled:
