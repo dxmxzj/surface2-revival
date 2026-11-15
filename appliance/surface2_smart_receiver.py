@@ -41,6 +41,7 @@ DRM_IOCTL_DROP_MASTER = 0x0000641F
 DRM_IOCTL_MODE_GETRESOURCES = 0xC04064A0
 DRM_IOCTL_MODE_GETCRTC = 0xC06864A1
 DRM_IOCTL_MODE_SETCRTC = 0xC06864A2
+DRM_IOCTL_MODE_GETENCODER = 0xC01464A6
 DRM_IOCTL_MODE_GETCONNECTOR = 0xC05064A7
 DRM_IOCTL_MODE_CREATE_DUMB = 0xC02064B2
 DRM_IOCTL_MODE_MAP_DUMB = 0xC01064B3
@@ -50,6 +51,7 @@ DRM_IOCTL_MODE_RMFB = 0xC00464AF
 DRM_IOCTL_MODE_SETPLANE = 0xC03064B7
 DRM_FORMAT_YUV420 = 0x32315559  # 'YU12' planar 4:2:0
 DRM_MODE_CONNECTOR_HDMIA = 11
+DRM_MODE_CONNECTOR_DSI = 16
 
 # Tegra 4 Hardware Overlay Planes:
 # Plane 42 -> CRTC 64 (DC0 / HDMI-A-1)
@@ -67,6 +69,19 @@ class DrmMasterManager:
         self.fd = None
         self.lock = threading.Lock()
         self.last_hdmi_connected = None
+        self.last_log = ""
+
+    def _log(self, msg):
+        line = f"{time.strftime('%H:%M:%S')} {msg}"
+        if line[9:] == self.last_log:
+            return
+        self.last_log = line[9:]
+        print(f"[DrmMasterManager] {msg}", flush=True)
+        try:
+            with open("/tmp/drm_hotplug.log", "a") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
 
     def acquire(self):
         with self.lock:
@@ -74,8 +89,9 @@ class DrmMasterManager:
                 try:
                     self.fd = os.open("/dev/dri/card0", os.O_RDWR | os.O_CLOEXEC)
                     fcntl.ioctl(self.fd, DRM_IOCTL_SET_MASTER, 0)
+                    self._log("Acquired DRM master on /dev/dri/card0")
                 except Exception as e:
-                    print(f"[DrmMasterManager] acquire failed: {e}", flush=True)
+                    self._log(f"acquire failed: {e}")
                     if self.fd is not None:
                         try:
                             os.close(self.fd)
@@ -105,12 +121,26 @@ class DrmMasterManager:
         mode_bytes = bytes(buf[36:104])
         return fb_id, mode_valid, mode_bytes
 
-    def _find_hdmi_connector(self, fd):
+    def _get_encoder_crtc(self, fd, enc_id, crtc_list):
+        if not enc_id:
+            return None
+        ebuf = bytearray(0x14)
+        struct.pack_into("<I", ebuf, 0, enc_id)
+        fcntl.ioctl(fd, DRM_IOCTL_MODE_GETENCODER, ebuf)
+        _, _, cur_crtc, possible_crtcs, _ = struct.unpack_from("<IIIII", ebuf, 0)
+        if cur_crtc:
+            return cur_crtc
+        for idx, cid in enumerate(crtc_list):
+            if possible_crtcs & (1 << idx):
+                return cid
+        return None
+
+    def _probe_connectors(self, fd):
         res = bytearray(0x40)
         fcntl.ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res)
         count_fbs, count_crtcs, count_conns, count_encs = struct.unpack_from("<IIII", res, 32)
         if count_conns <= 0:
-            return None, None
+            return None, None, None, 64, 98, 0
         fb_buf = (ctypes.c_uint32 * max(1, count_fbs))()
         crtc_buf = (ctypes.c_uint32 * max(1, count_crtcs))()
         conn_buf = (ctypes.c_uint32 * max(1, count_conns))()
@@ -123,66 +153,115 @@ class DrmMasterManager:
             count_fbs, count_crtcs, count_conns, count_encs
         )
         fcntl.ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res)
+        crtc_list = [crtc_buf[i] for i in range(count_crtcs)]
+        fallback_fb = fb_buf[0] if count_fbs > 0 else 0
+
+        hdmi_cid = None
+        hdmi_connected = False
+        chosen_mode = None
+        hdmi_crtc_id = 64
+        dsi_crtc_id = 98
+
         for cid in conn_buf:
             c = bytearray(0x50)
             struct.pack_into("<I", c, 48, cid)
             fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c)
             count_modes, count_props, count_enc = struct.unpack_from("<III", c, 32)
+            enc_id = struct.unpack_from("<I", c, 44)[0]
             conn_type = struct.unpack_from("<I", c, 52)[0]
             connection = struct.unpack_from("<I", c, 60)[0]
+
+            if conn_type == DRM_MODE_CONNECTOR_DSI:
+                resolved = self._get_encoder_crtc(fd, enc_id, crtc_list)
+                if resolved:
+                    dsi_crtc_id = resolved
+                continue
+
             if conn_type != DRM_MODE_CONNECTOR_HDMIA:
                 continue
-            if connection != 1 or count_modes <= 0:
-                return cid, None
-            modes_buf = ctypes.create_string_buffer(68 * count_modes)
+
+            hdmi_cid = cid
+            hdmi_connected = (connection == 1)
+
+            encs_buf = (ctypes.c_uint32 * max(1, count_enc))()
+            modes_buf = ctypes.create_string_buffer(68 * max(1, count_modes))
             props_buf = (ctypes.c_uint32 * max(1, count_props))()
             pvals_buf = (ctypes.c_uint64 * max(1, count_props))()
-            encs_buf = (ctypes.c_uint32 * max(1, count_enc))()
-            c = bytearray(0x50)
+            c2 = bytearray(0x50)
             struct.pack_into(
-                "<QQQQIIII", c, 0,
+                "<QQQQIIII", c2, 0,
                 ctypes.addressof(encs_buf), ctypes.addressof(modes_buf),
                 ctypes.addressof(props_buf), ctypes.addressof(pvals_buf),
                 count_modes, count_props, count_enc, 0
             )
-            struct.pack_into("<I", c, 48, cid)
-            fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c)
-            chosen_mode = modes_buf.raw[:68]
-            for i in range(count_modes):
-                m = modes_buf.raw[i * 68 : (i + 1) * 68]
-                hdisp, vdisp = struct.unpack_from("<H8xH", m, 4)
-                if hdisp == 1920 and vdisp == 1080:
-                    chosen_mode = m
-                    break
-            return cid, chosen_mode
-        return None, None
+            struct.pack_into("<I", c2, 48, cid)
+            fcntl.ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, c2)
+
+            resolved = self._get_encoder_crtc(fd, enc_id or (encs_buf[0] if count_enc > 0 else 0), crtc_list)
+            if resolved:
+                hdmi_crtc_id = resolved
+
+            if hdmi_connected and count_modes > 0:
+                best_score = -1
+                for i in range(count_modes):
+                    m = modes_buf.raw[i * 68 : (i + 1) * 68]
+                    hdisp = struct.unpack_from("<H", m, 4)[0]
+                    vdisp = struct.unpack_from("<H", m, 14)[0]
+                    vrefresh, flags, mtype = struct.unpack_from("<III", m, 24)
+                    interlaced = (flags & 0x10) != 0
+                    preferred = (mtype & 0x08) != 0
+                    score = 0
+                    if hdisp == 1920 and vdisp == 1080 and not interlaced:
+                        score += 100 + (20 if vrefresh == 60 else 0)
+                    if preferred and not interlaced:
+                        score += 10
+                    if score > best_score:
+                        best_score = score
+                        chosen_mode = m
+            elif hdmi_connected and count_modes == 0:
+                chosen_mode = struct.pack(
+                    "<IHHHHHHHHHHIII32s",
+                    148500,
+                    1920, 2008, 2052, 2200, 0,
+                    1080, 1084, 1089, 1125, 0,
+                    60, 0x5, 0x40, b"1920x1080"
+                )
+        return hdmi_cid, hdmi_connected, chosen_mode, hdmi_crtc_id, dsi_crtc_id, fallback_fb
 
     def sync_hdmi_hotplug(self):
         fd = self.acquire()
         if fd is None:
             return
         try:
-            st_path = "/sys/class/drm/card0-HDMI-A-1/status"
+            hdmi_cid, connected, mode_bytes, hdmi_crtc_id, dsi_crtc_id, fallback_fb = self._probe_connectors(fd)
+            if hdmi_cid is None:
+                return
+            _, hdmi_active, _ = self._get_crtc(fd, hdmi_crtc_id)
             en_path = "/sys/class/drm/card0-HDMI-A-1/enabled"
-            connected = os.path.exists(st_path) and open(st_path).read().strip() == "connected"
-            enabled = os.path.exists(en_path) and open(en_path).read().strip() == "enabled"
+            sys_enabled = os.path.exists(en_path) and open(en_path).read().strip() == "enabled"
+            enabled = bool(hdmi_active) or sys_enabled
 
             if connected and not enabled:
-                fb_id, _, _ = self._get_crtc(fd, 98)
-                hdmi_cid, mode_bytes = self._find_hdmi_connector(fd)
-                if fb_id and hdmi_cid and mode_bytes:
+                fb_id, _, _ = self._get_crtc(fd, dsi_crtc_id)
+                if not fb_id:
+                    fb_id = fallback_fb
+                if fb_id and mode_bytes:
                     conn_arr = (ctypes.c_uint32 * 1)(hdmi_cid)
                     sc = bytearray(0x68)
-                    struct.pack_into("<QIIIIIIIII", sc, 0, ctypes.addressof(conn_arr), 1, 64, fb_id, 0, 0, 0, 1, 0, 0)
+                    struct.pack_into("<QIIIIIIIII", sc, 0, ctypes.addressof(conn_arr), 1, hdmi_crtc_id, fb_id, 0, 0, 0, 1, 0, 0)
                     sc[36:104] = mode_bytes
                     fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
                     apply_hdmi_phy_fix()
+                    self._log(f"Enabled HDMI-A-1 (cid={hdmi_cid}) on CRTC {hdmi_crtc_id} using fb_id={fb_id}")
+                else:
+                    self._log(f"HDMI connected but missing fb_id={fb_id} or mode={bool(mode_bytes)}")
             elif not connected and enabled:
                 sc = bytearray(0x68)
-                struct.pack_into("<QIIIIIIIII", sc, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0)
+                struct.pack_into("<QIIIIIIIII", sc, 0, 0, 0, hdmi_crtc_id, 0, 0, 0, 0, 0, 0, 0)
                 fcntl.ioctl(fd, DRM_IOCTL_MODE_SETCRTC, sc)
+                self._log(f"Disabled HDMI-A-1 on CRTC {hdmi_crtc_id} (DSI CRTC {dsi_crtc_id} untouched)")
         except Exception as e:
-            print(f"[DrmMasterManager] sync_hdmi_hotplug error: {e}", flush=True)
+            self._log(f"sync_hdmi_hotplug error: {e}")
 
 
 drm_manager = DrmMasterManager()
